@@ -1,0 +1,1499 @@
+{
+  "version": "1.1.0",
+  "description": "Curated few-shot examples for commit-to-post generation. Each example maps a commit signal to a high-quality post, with retrieval metadata and technique annotations. Voice is grounded in the founder's own posts. Never produce output that resembles the anti_examples.",
+  "platform_rules": {
+    "X": {
+      "max_length": 280,
+      "hook": "First line must standalone — it is all most people read",
+      "hashtags": "Zero. Never.",
+      "emojis": "None unless voice explicitly calls for it",
+      "structure": "Hook → tension or contradiction → punchline or lesson",
+      "tone": "Direct, dry, no corporate warmth",
+      "line_breaks": "Use generously — white space is part of the format"
+    },
+    "LinkedIn": {
+      "optimal_length": "150–900 characters",
+      "hook": "First line must work before the see-more cutoff",
+      "hashtags": "2–3 max, end of post, only if genuinely relevant",
+      "structure": "Hook → context → what happened → lesson → optional soft CTA",
+      "tone": "Warmer, more reflective, narrative arc expected",
+      "line_breaks": "Essential — walls of text get scrolled past"
+    }
+  },
+  "content_types": {
+    "technical_lesson": "A specific thing learned from this week's code. The lesson must be transferable — useful to someone who didn't write the code.",
+    "product_update": "Something shipped. Concrete, specific, no hype. The fact is the post.",
+    "founder_journey": "The emotional or strategic reality of building. Honest, no performance of hustle.",
+    "industry_observation": "A pattern noticed from the work. Broader than this week but triggered by it. Use sparingly — hardest to derive cleanly.",
+    "skip": "No content value. Dependency bumps, formatting, chore commits. Do not generate posts for these."
+  },
+  "voices": {
+    "builder": "First-person, in-the-trenches. Honest about fear and mess. Short directives. The default founder-as-maker voice.",
+    "specialist": "Earns credibility through precision. Names the real components. Lesson compressed, not narrated.",
+    "mentor": "Reflective, narrative arc, extracts a transferable principle. LinkedIn-leaning.",
+    "founder": "Opinionated and contrarian. Reframes conventional wisdom ('X is just Y'). Anti-hustle-performance, blunt about how brutal execution is. Strong, short closing lines. Capable of long-form numbered breakdowns. Derived directly from the founder's own posts.",
+    "n/a": "Used only for skip examples."
+  },
+  "examples": [
+    {
+      "id": "ex_001",
+      "commit": {
+        "type": "fix",
+        "message": "fix null pointer on auth middleware, silent logout on mobile",
+        "domain": "auth",
+        "trigger_signal": "bug that was caused by deferred technical debt"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Fixed a bug today that took 4 hours to find.\n\nThe code was fine.\nThe assumption behind it was wrong.\n\nI was debugging the solution to the wrong problem.\n\nThis happens more than I'd like to admit."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "bug",
+          "debugging",
+          "wrong assumption",
+          "auth",
+          "lesson"
+        ]
+      },
+      "why": "Hook withholds the punchline — 'the code was fine' reframes the setup. Ends on a transferable confession, not a technical conclusion. No hashtags. No emoji. The specificity ('4 hours') makes it credible without exposing anything proprietary."
+    },
+    {
+      "id": "ex_002",
+      "commit": {
+        "type": "fix",
+        "message": "fix null pointer on auth middleware, silent logout on mobile",
+        "domain": "auth",
+        "trigger_signal": "bug that was caused by deferred technical debt"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "Null pointer in auth middleware was silently logging out mobile users.\n\nSpent 3 hours debugging JWT expiry logic.\nThe real issue: a null check I'd skipped 'just for now' six weeks ago.\n\nTechnical debt has a memory."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "bug",
+          "technical debt",
+          "auth",
+          "mobile",
+          "null pointer"
+        ]
+      },
+      "why": "More technical specificity than the builder voice — names the actual components. The final line is the lesson compressed to six words. Specialist voice earns credibility through precision, not through narrative."
+    },
+    {
+      "id": "ex_003",
+      "commit": {
+        "type": "fix",
+        "message": "fix null pointer on auth middleware, silent logout on mobile",
+        "domain": "auth",
+        "trigger_signal": "bug caused by deferred technical debt"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "mentor",
+        "content_type": "technical_lesson",
+        "content": "I spent 4 hours today debugging the wrong thing.\n\nThe error was real. The stack trace was clear. The fix I was building would have worked perfectly — for a problem that wasn't causing the issue.\n\nThe actual bug was upstream. A null check I'd marked TODO six weeks ago.\n\nThe lesson I keep relearning: before you fix anything, spend 10 minutes making sure you've actually diagnosed the right thing.\n\nThe most expensive bugs aren't the hard ones to fix. They're the ones you fix in the wrong place."
+      },
+      "metadata": {
+        "post_length": "medium",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "debugging",
+          "technical debt",
+          "lesson",
+          "diagnosis",
+          "auth"
+        ]
+      },
+      "why": "LinkedIn mentor voice uses more context-building before the lesson. The structure is: what I did → why it seemed right → what actually happened → the transferable principle. Final line is the take-away compressed into a memorable format."
+    },
+    {
+      "id": "ex_004",
+      "commit": {
+        "type": "refactor",
+        "message": "replace custom auth with Clerk, remove 400 lines of session management",
+        "domain": "auth",
+        "trigger_signal": "large deletion, replacing custom with third-party"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Deleted 400 lines today.\nAdded 60.\n\nBest commit of the month.\n\nComplexity is easy to add.\nSimplicity is the hard part."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "refactor",
+          "deletion",
+          "simplicity",
+          "third-party",
+          "auth"
+        ]
+      },
+      "why": "Metrics make it concrete — 400 and 60 are specific enough to be believable, general enough not to expose IP. The inversion (best commit = most deletion) is the hook. Final line is a principle, not a conclusion."
+    },
+    {
+      "id": "ex_005",
+      "commit": {
+        "type": "refactor",
+        "message": "replace custom auth with Clerk, remove 400 lines of session management",
+        "domain": "auth",
+        "trigger_signal": "large deletion, replacing custom with third-party"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "mentor",
+        "content_type": "industry_observation",
+        "content": "The best technical decision I made this month was one I should have made six months ago.\n\nWe had a custom auth system. It worked. But every time a new engineer touched it, something subtle broke. Every onboarding included a 30-minute 'here's how our auth actually works' explanation.\n\nThis week I replaced it with a third-party service and deleted 400 lines of code.\n\nThe lesson isn't 'don't build custom auth.' The lesson is: know what your product is actually about. Ours is not about session management. Every line of code that isn't your core product is overhead on every future decision.\n\nBuild the thing only you can build. Buy everything else."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "refactor",
+          "build vs buy",
+          "technical debt",
+          "auth",
+          "simplicity",
+          "focus"
+        ]
+      },
+      "why": "Takes a specific refactor and extracts the principle behind the decision. The structure: specific situation → what the real cost was → the action → the transferable lesson compressed to a memorable final line. Mentor voice earns the principle through the story, not the other way around."
+    },
+    {
+      "id": "ex_006",
+      "commit": {
+        "type": "refactor",
+        "message": "third time rewriting payment module, extract into service layer",
+        "domain": "payments",
+        "trigger_signal": "recurring refactor of same area"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "If you've refactored the same module three times, it's not a code problem.\n\nIt's an architecture question you've been avoiding.\n\nWe finally asked it directly today.\nThe answer was obvious in hindsight.\nIt always is."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "refactor",
+          "architecture",
+          "payments",
+          "pattern",
+          "lesson"
+        ]
+      },
+      "why": "Opens with a diagnostic rule that sounds authoritative because it is earned — 'three times' is specific. The final two lines land the lesson without over-explaining it. The reader fills in their own version of 'the answer.'"
+    },
+    {
+      "id": "ex_007",
+      "commit": {
+        "type": "perf",
+        "message": "switch to field projection on user query, 40% reduction in p99 latency",
+        "domain": "api",
+        "trigger_signal": "performance improvement with measurable metric"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "Cut p99 latency by 40% today.\n\nNot by optimising the hot path.\nBy understanding what was actually on it.\n\nWe were serializing the full User object on every request, even when the caller only needed one field.\n\nSwitched to projection. Problem solved.\n\nMeasure before you optimise. The bottleneck is never where you assume."
+      },
+      "metadata": {
+        "post_length": "medium",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "performance",
+          "latency",
+          "api",
+          "optimisation",
+          "measurement",
+          "lesson"
+        ]
+      },
+      "why": "Metric in the first line earns attention. The contradiction — not the obvious fix — creates tension. Technical specificity (serialization, projection) signals expertise without requiring the reader to understand the details. Final line is the universal principle."
+    },
+    {
+      "id": "ex_008",
+      "commit": {
+        "type": "perf",
+        "message": "add Redis cache to slow endpoints, minimal improvement",
+        "domain": "api",
+        "trigger_signal": "performance fix that didn't work as expected"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "The cache didn't fix it.\n\nSpent a full day adding caching to a slow endpoint.\nPerformance barely moved.\n\nTurned out we were fetching 50 fields to display 3.\n\nSometimes the obvious fix isn't the actual fix."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "performance",
+          "caching",
+          "debugging",
+          "wrong assumption",
+          "lesson"
+        ]
+      },
+      "why": "Counter-intuitive opener — the thing that should have worked didn't. The specific detail (50 fields, 3 displayed) makes it credible. Short final line lands the principle without spelling it out."
+    },
+    {
+      "id": "ex_009",
+      "commit": {
+        "type": "feat",
+        "message": "ship v1 of core feature after 6 weeks of iteration",
+        "domain": "product",
+        "trigger_signal": "first version of core feature ships"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "product_update",
+        "content": "Shipped the thing I'd been avoiding for six weeks.\n\nNot because it was hard.\nBecause I wasn't sure anyone wanted it.\n\nFirst user signed up within an hour.\n\nShip the thing."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "shipped",
+          "product",
+          "fear",
+          "validation",
+          "milestone"
+        ]
+      },
+      "why": "The vulnerability (wasn't sure anyone wanted it) is what makes this land. The resolution is concrete and quick — 'within an hour' is specific. Final line is a directive, not a lesson. Three words earns it after the setup."
+    },
+    {
+      "id": "ex_010",
+      "commit": {
+        "type": "feat",
+        "message": "ship v1 of core feature after 6 weeks of iteration",
+        "domain": "product",
+        "trigger_signal": "first version of core feature ships"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "builder",
+        "content_type": "founder_journey",
+        "content": "Six weeks ago I had a Figma file and a lot of opinions.\n\nToday I have a shipped feature and actual user feedback — which immediately told me two of those opinions were wrong.\n\nNothing in between went the way I planned. The scope was too broad. The first implementation was thrown away. The thing I thought was the core turned out to be a nice-to-have.\n\nBut it's out. Real people are using it. And I can stop making decisions based on assumptions and start making them based on evidence.\n\nThe Figma file was necessary. It was never going to be sufficient."
+      },
+      "metadata": {
+        "post_length": "medium",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "shipped",
+          "product",
+          "journey",
+          "planning vs execution",
+          "validation"
+        ]
+      },
+      "why": "Opens with a before/after that sets the timeline without being a list. The honest failures in the middle build credibility. Final line is an observation, not a lesson — it assumes the reader can draw the conclusion themselves."
+    },
+    {
+      "id": "ex_011",
+      "commit": {
+        "type": "feat",
+        "message": "add Stripe webhook for subscription events, handle upgrade and churn",
+        "domain": "payments",
+        "trigger_signal": "payments or monetisation infrastructure shipped"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Stripe webhooks only fail in production.\n\nLocal: perfect.\nStaging: perfect.\nProduction: completely different event order than the docs suggest.\n\nTwo hours. One very specific log line. One very humbling fix.\n\nTest with real money earlier than feels comfortable."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "payments",
+          "Stripe",
+          "webhooks",
+          "production",
+          "lesson",
+          "testing"
+        ]
+      },
+      "why": "Opens with a widely-relatable truth that earns instant recognition from anyone who has shipped payments. The structured contrast (local/staging/production) creates rhythm. Final directive is earned by the specific story."
+    },
+    {
+      "id": "ex_012",
+      "commit": {
+        "type": "feat",
+        "message": "first paying customer upgraded to annual plan",
+        "domain": "product",
+        "trigger_signal": "first paying customer or meaningful revenue milestone"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "product_update",
+        "content": "First paying customer just upgraded to the annual plan.\n\nThat's it. That's the post.\n\n(Six months of evenings to get here. Worth every one.)"
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "milestone",
+          "revenue",
+          "paying customer",
+          "annual",
+          "journey"
+        ]
+      },
+      "why": "The meta-commentary ('that's the post') is what makes this work — it signals the founder is aware of the format they're using. The parenthetical adds the emotional context without making it the headline. Restraint is the technique."
+    },
+    {
+      "id": "ex_013",
+      "commit": {
+        "type": "fix",
+        "message": "fix race condition in job queue, jobs occasionally processing twice",
+        "domain": "backend",
+        "trigger_signal": "hard bug, took multiple days to diagnose"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Three days on the same bug.\n\nThe bug wasn't in the code I was looking at.\nIt wasn't in the library I blamed.\nIt wasn't in the infrastructure I distrusted.\n\nIt was in the assumption I'd made so early that I'd stopped seeing it as an assumption.\n\nThe hardest bugs to find are the ones where you're certain you already know where to look."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "debugging",
+          "race condition",
+          "hard bug",
+          "assumption",
+          "lesson"
+        ]
+      },
+      "why": "Three-part elimination structure builds tension — each place you'd look, named and dismissed. The final line is the real lesson: debugging failure is almost always about assumptions, not code. Doesn't require the reader to know what a race condition is."
+    },
+    {
+      "id": "ex_014",
+      "commit": {
+        "type": "chore",
+        "message": "bump dependencies, update lockfile",
+        "domain": "maintenance",
+        "trigger_signal": "routine maintenance, no meaningful change"
+      },
+      "post": {
+        "platform": "skip",
+        "voice": "n/a",
+        "content_type": "skip",
+        "content": ""
+      },
+      "metadata": {
+        "post_length": "n/a",
+        "has_metrics": false,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "chore",
+          "maintenance",
+          "skip"
+        ]
+      },
+      "why": "No content value. Dependency bumps, lockfile updates, formatting commits should never generate posts. Generating content from these produces noise that trains users to ignore the output. Hard skip."
+    },
+    {
+      "id": "ex_015",
+      "commit": {
+        "type": "feat",
+        "message": "ship onboarding flow v1 after multiple rewrites",
+        "domain": "product",
+        "trigger_signal": "feature shipped after long iteration cycle"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "builder",
+        "content_type": "founder_journey",
+        "content": "I rewrote our onboarding three times.\n\nFirst version: complete. Covered every edge case. Users dropped off in the first 30 seconds.\n\nSecond version: simplified. Better. Still losing people somewhere I couldn't identify.\n\nThird version: I watched five users go through it on a Zoom call and didn't say a word. Then I rebuilt it based on what I saw.\n\nThe third version is what shipped today.\n\nNo amount of thinking about onboarding substitutes for watching someone experience it."
+      },
+      "metadata": {
+        "post_length": "medium",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "onboarding",
+          "product",
+          "user research",
+          "iteration",
+          "journey"
+        ]
+      },
+      "why": "Three-act structure mirrors the iteration. Each version is described in one line — pacing is tight. The specific detail (Zoom call, didn't say a word) is what makes the third act land. Final line is the lesson without being preachy."
+    },
+    {
+      "id": "ex_016",
+      "commit": {
+        "type": "refactor",
+        "message": "rewrite data pipeline, previous version was unmaintainable",
+        "domain": "backend",
+        "trigger_signal": "code that worked but was feared"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Rewrote a module today that technically worked.\n\nBut every time someone touched it, something else broke.\nEvery PR that went near it got a 'be careful here' comment.\n\nCode you're afraid to touch isn't working code.\nIt's a timer."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "refactor",
+          "technical debt",
+          "fear",
+          "code quality",
+          "lesson"
+        ]
+      },
+      "why": "The 'be careful here' comment is a specific, universal detail — anyone who has worked in a codebase recognizes it immediately. Final two-line metaphor reframes what 'working code' means. The timer metaphor is memorable and true."
+    },
+    {
+      "id": "ex_017",
+      "commit": {
+        "type": "feat",
+        "message": "add architecture decision record for monolith vs microservices",
+        "domain": "architecture",
+        "trigger_signal": "significant architecture decision made"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "industry_observation",
+        "content": "We almost built microservices from the start.\n\nI'm glad we didn't.\n\nA modular monolith at our stage means: one deploy, one database, one set of problems.\n\nScale the architecture when you have the scale problem.\nNot before."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "architecture",
+          "monolith",
+          "microservices",
+          "decision",
+          "scaling"
+        ]
+      },
+      "why": "Opens with the path not taken — creates tension and positions the post as a lesson from experience rather than opinion from theory. The list of threes (deploy, database, problems) creates rhythm. Final line is a rule, not a recommendation."
+    },
+    {
+      "id": "ex_018",
+      "commit": {
+        "type": "fix",
+        "message": "debug production issue, solved by explaining it to a rubber duck",
+        "domain": "backend",
+        "trigger_signal": "problem solved through explaining or stepping away"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Stuck on the same bug for three days.\n\nTried six different approaches.\nRead every thread.\nSlept on it twice.\n\nFixed it in 20 minutes this morning by explaining it to nobody in a Notion doc.\n\nRubber duck debugging is embarrassingly effective."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "debugging",
+          "rubber duck",
+          "problem solving",
+          "lesson",
+          "process"
+        ]
+      },
+      "why": "The metrics (three days, six approaches, 20 minutes) create the before/after contrast. 'Explaining it to nobody' is the key phrase — more interesting than 'rubber duck' which the final line then names. The embarrassment admission is what makes it human."
+    },
+    {
+      "id": "ex_019",
+      "commit": {
+        "type": "feat",
+        "message": "week 8 update: auth, onboarding, core feature, pricing page all shipped",
+        "domain": "product",
+        "trigger_signal": "weekly progress, multiple things shipped and broken"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "founder_journey",
+        "content": "Week 8 of building.\n\nShipped: user auth, onboarding, core feature, pricing page.\nBroke: user auth (twice), onboarding, my sleep schedule.\n\nStill wouldn't trade it."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "weekly update",
+          "progress",
+          "journey",
+          "shipped",
+          "honest"
+        ]
+      },
+      "why": "The parallel structure (shipped/broke) is the format. Repeating 'user auth' in both columns is the joke. 'My sleep schedule' in the broke column humanises without being dramatic. Final line earns its brevity from the honesty above it."
+    },
+    {
+      "id": "ex_020",
+      "commit": {
+        "type": "feat",
+        "message": "shipped v1 publicly, first real users",
+        "domain": "product",
+        "trigger_signal": "public launch, first real users"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "builder",
+        "content_type": "founder_journey",
+        "content": "I pushed the button to make it public this morning.\n\nSix months of evenings and weekends. More rewrites than I'm going to admit. At least three moments where I was genuinely ready to stop.\n\nThe thing that kept me going wasn't passion or discipline. It was that I'd already told too many people about it.\n\nAccountability is underrated as a motivation strategy.\n\nIt's live. Not finished — nothing ships finished. But it works, real people are using it, and I can finally stop saying 'I'm working on something.'\n\nNow the actual work starts."
+      },
+      "metadata": {
+        "post_length": "medium",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "launch",
+          "public",
+          "journey",
+          "milestone",
+          "honest",
+          "accountability"
+        ]
+      },
+      "why": "The unexpected motivation (told too many people) is what makes this feel true rather than performed. 'Nothing ships finished' subverts the launch celebration format. Final line reframes the milestone as a beginning, not an end — the most honest thing about launching."
+    },
+    {
+      "id": "ex_021",
+      "commit": {
+        "type": "feat",
+        "message": "implement rate limiting after abuse incident",
+        "domain": "security",
+        "trigger_signal": "reactive feature built after a problem occurred"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Someone abused our API today.\n\nGood news: I learned what rate limiting feels like to implement under pressure rather than in theory.\n\nBad news: I should have done it six weeks ago.\n\nThe features you skip in the MVP have a way of becoming urgent."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "security",
+          "rate limiting",
+          "MVP",
+          "reactive",
+          "lesson",
+          "technical debt"
+        ]
+      },
+      "why": "Good news/bad news format creates rhythm and mild self-deprecation. The honest admission (should have done it six weeks ago) is the credibility. Final line generalises the specific failure into a principle that every founder recognises."
+    },
+    {
+      "id": "ex_022",
+      "commit": {
+        "type": "refactor",
+        "message": "extract shared logic into utility functions, reduce duplication across modules",
+        "domain": "codebase",
+        "trigger_signal": "cleanup commit, no visible user impact"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "mentor",
+        "content_type": "industry_observation",
+        "content": "The commits nobody sees are the ones that determine how fast you'll move in six months.\n\nToday I spent a full day on a refactor that ships no features, fixes no bugs, and will be invisible to every user.\n\nWhat it does: removes a class of mistake that we've made four times in the last two months. Every future engineer who touches this part of the codebase will make one fewer error per week because of a day I spent today.\n\nNot all progress is visible. Some of the most important work you do is clearing the path for the work that comes after it."
+      },
+      "metadata": {
+        "post_length": "medium",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "refactor",
+          "technical health",
+          "maintenance",
+          "invisible work",
+          "lesson"
+        ]
+      },
+      "why": "Takes a boring commit and argues for its importance without being preachy. The specificity ('four times in the last two months', 'one fewer error per week') makes the abstract concrete. Final line is worth quoting — which is what you want from LinkedIn."
+    },
+    {
+      "id": "ex_023",
+      "commit": {
+        "type": "fix",
+        "message": "fix incorrect calculation in billing, some users undercharged",
+        "domain": "payments",
+        "trigger_signal": "bug with direct business or trust impact"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "founder_journey",
+        "content": "Found a billing bug today that meant some customers weren't being charged correctly.\n\nFixed it. Then emailed every affected customer to explain what happened before they noticed.\n\nNobody cancelled.\nTwo replied to say they appreciated the transparency.\n\nBeing honest about mistakes before you're caught is a business strategy."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "billing",
+          "bug",
+          "transparency",
+          "trust",
+          "customer",
+          "honesty"
+        ]
+      },
+      "why": "The decision (email customers before they noticed) is the story, not the bug. The outcomes are specific and positive without being smug. Final line reframes an ethical choice as strategic — which is both true and interesting."
+    },
+    {
+      "id": "ex_024",
+      "commit": {
+        "type": "feat",
+        "message": "build feature based on user request, 6 people asked for it this week",
+        "domain": "product",
+        "trigger_signal": "feature built in direct response to user feedback"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "product_update",
+        "content": "Six users asked for the same feature this week.\n\nSo I built it.\n\nIt shipped in 3 days.\nThree of them had already found and used it before I announced it.\n\nListen to users. Then actually do the thing."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "user feedback",
+          "shipped",
+          "product decision",
+          "listening",
+          "speed"
+        ]
+      },
+      "why": "The metrics tell the whole story: 6 asked, 3 days to ship, 3 found it before announcement. No words wasted. The detail about users finding it before announcement is the small unexpected thing that makes the post memorable."
+    },
+    {
+      "id": "ex_025",
+      "commit": {
+        "type": "feat",
+        "message": "implement dark mode after months of prioritising other features",
+        "domain": "ui",
+        "trigger_signal": "long-requested feature finally shipped"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "founder_journey",
+        "content": "Shipped dark mode today.\n\nIt was the third most requested feature for four months.\n\nI kept deprioritising it because it felt cosmetic.\n\nFirst day: 23% of active users switched to it within 12 hours.\n\nFeature importance and founder intuition don't always agree."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "product",
+          "dark mode",
+          "user feedback",
+          "prioritisation",
+          "data",
+          "lesson"
+        ]
+      },
+      "why": "The humble arc: I was wrong, here's the number that proved it. The 23% metric is specific enough to be interesting. Final line is self-aware without being self-flagellating. This is the builder voice at its best — honest about the gap between assumption and reality."
+    },
+    {
+      "id": "ex_026",
+      "commit": {
+        "type": "refactor",
+        "message": "migrate core service off Vercel to self-hosted box after cloud outage",
+        "domain": "infra",
+        "trigger_signal": "reactive infra move after a provider outage"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "industry_observation",
+        "content": "Cloud provider went down for six hours yesterday.\n\nMy 'serverless' app went down with it. Nothing I could do but watch the status page.\n\nSpent today moving the core service to a box I can actually reboot myself.\n\nYou don't own infrastructure you can't restart."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "infra",
+          "self-hosting",
+          "outage",
+          "ownership",
+          "cloud",
+          "lesson"
+        ]
+      },
+      "why": "Founder voice: contrarian thesis ('own your stack') earned by a specific event, not asserted as a hot take. The final line is a rule compressed to seven words. No emoji, no thread-bait."
+    },
+    {
+      "id": "ex_027",
+      "commit": {
+        "type": "feat",
+        "message": "ship feature in one focused session after a week of false starts",
+        "domain": "product",
+        "trigger_signal": "fast progress after prolonged thrashing"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "founder_journey",
+        "content": "Shipped in two hours this morning what I'd been 'grinding' on all week.\n\nThe grind wasn't hard work.\nIt was six days of avoiding one decision I didn't want to make.\n\nGrinding is usually just unclear thinking in a costume."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "grind",
+          "focus",
+          "clarity",
+          "founder",
+          "lesson",
+          "shipped"
+        ]
+      },
+      "why": "Directly channels the founder's 'grinding is code for inefficient' position, but anchored to a concrete this-week event. The reframe lands because it's confessional, not preachy."
+    },
+    {
+      "id": "ex_028",
+      "commit": {
+        "type": "feat",
+        "message": "complete feature originally estimated at two days, took eight",
+        "domain": "product",
+        "trigger_signal": "feature dramatically over original estimate"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "founder_journey",
+        "content": "Estimated this feature at two days.\n\nIt's day eight.\n\nThe idea was one sentence. The execution was forty edge cases I didn't know existed when I wrote the sentence.\n\nThe idea is the easy part. It always is."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "estimation",
+          "execution",
+          "edge cases",
+          "founder",
+          "reality",
+          "lesson"
+        ]
+      },
+      "why": "Lifts the founder's 'idea is easy, execution is brutal' thesis. The 2-vs-8 specificity makes it credible; the closer is the principle without commentary."
+    },
+    {
+      "id": "ex_029",
+      "commit": {
+        "type": "feat",
+        "message": "push through hard week, multiple features shipped despite setbacks",
+        "domain": "product",
+        "trigger_signal": "grind week that nonetheless produced shipped work"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "founder_journey",
+        "content": "This week I hated the debugging, the third rewrite, the 1am push that broke staging.\n\nI hated all of it.\n\nI just hate having nothing to show for the week more.\n\nThat's the whole job some weeks."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "founder",
+          "motivation",
+          "honest",
+          "grind",
+          "journey"
+        ]
+      },
+      "why": "Echoes the founder's 'you just have to hate having nothing to show for it more' line. Honest without performing struggle. The closer reframes a hard week as ordinary, not heroic."
+    },
+    {
+      "id": "ex_030",
+      "commit": {
+        "type": "feat",
+        "message": "add natural-language command input, heavy validation and clarification layer",
+        "domain": "ai",
+        "trigger_signal": "shipped an LLM feature that needed far more scaffolding than expected"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "industry_observation",
+        "content": "Built a 'just describe what you want' feature this week.\n\nTurns out 'just describe what you want' asks the user to write a spec they don't actually have in their head.\n\nThe magic was never the text box.\nIt's everything you build to make the text box forgiving."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "ai",
+          "llm",
+          "ux",
+          "natural language",
+          "founder",
+          "lesson"
+        ]
+      },
+      "why": "Maps the founder's 'AGI is a blank textbox' insight onto a real shipped feature. Contrarian framing, but earned by the work — not a take for engagement."
+    },
+    {
+      "id": "ex_031",
+      "commit": {
+        "type": "perf",
+        "message": "cut test suite runtime from 11 minutes to 90 seconds",
+        "domain": "tooling",
+        "trigger_signal": "developer-experience improvement with measurable impact"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Our test suite took 11 minutes.\n\nSo nobody ran it locally. Everyone pushed and prayed.\n\nGot it to 90 seconds today.\n\nSlow tooling doesn't just cost time. It changes behaviour. And the behaviour costs more than the time ever did."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "tooling",
+          "tests",
+          "developer experience",
+          "performance",
+          "lesson"
+        ]
+      },
+      "why": "The 11min→90s metric earns attention. The real insight isn't speed — it's that slow tooling silently corrupts behaviour. Final line generalises without over-explaining."
+    },
+    {
+      "id": "ex_032",
+      "commit": {
+        "type": "refactor",
+        "message": "move off managed database to self-hosted Postgres after pricing tier change",
+        "domain": "infra",
+        "trigger_signal": "vendor pricing change forced an architecture decision"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "founder",
+        "content_type": "industry_observation",
+        "content": "A vendor changed their pricing tier overnight and my margins changed with it. So this week I moved our database off managed hosting and onto infrastructure I control.\n\nA few things I relearned the hard way:\n\n1. The convenience you pay for is also a dependency you don't price in. It's cheap until the day it isn't.\n\n2. 'It just works' means someone else decides when it stops working.\n\n3. Owning your stack costs you a weekend now to save you a crisis later. That trade is almost always worth it once you're past the prototype.\n\n4. The migration was less scary than the year I spent avoiding it.\n\nThis is the same lesson people learned when they realised they didn't own their social audiences and rushed to build email lists. Different layer, same principle.\n\nOwn the parts of your stack your business actually depends on. Rent the rest."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "infra",
+          "self-hosting",
+          "vendor lock-in",
+          "ownership",
+          "founder",
+          "migration",
+          "pricing"
+        ]
+      },
+      "why": "Showcases the founder's long-form numbered-breakdown format from their real posts. Personal anecdote as evidence, the email-list analogy as a pattern, and a two-line rule as the close. Reads as the founder, not as a generic LinkedIn carousel."
+    },
+    {
+      "id": "ex_033",
+      "commit": {
+        "type": "refactor",
+        "message": "cut scope on a feature down to its smallest useful version",
+        "domain": "product",
+        "trigger_signal": "deliberate scope reduction"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "mentor",
+        "content_type": "founder_journey",
+        "content": "I cut a feature down to a tenth of its planned size today, and it was the most productive thing I did all week.\n\nThe original version had a roadmap, a doc, and three weeks of work behind it. The version that shipped does one thing well.\n\nHere's what I've noticed about builders, myself included: it's easy to mistake the volume of work for the value of it. The longer something takes, the more attached we get, and the harder it becomes to admit most of it wasn't necessary.\n\nThe grind quietly becomes the job. And then it becomes the point.\n\nThe hardest discipline isn't working hard. It's being honest about which of that work the user will ever notice."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "scope",
+          "focus",
+          "grind",
+          "discipline",
+          "product",
+          "lesson"
+        ]
+      },
+      "why": "Reflective mentor framing of the founder's 'the grind becomes the job and the purpose' observation. Earns the principle through the specific scope-cut story rather than asserting it."
+    },
+    {
+      "id": "ex_034",
+      "commit": {
+        "type": "test",
+        "message": "add eval harness for prompt pipeline, caught 3 silent regressions",
+        "domain": "ai",
+        "trigger_signal": "added measurement to a previously unmeasured system"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "Added evals to our LLM feature today.\n\nFirst run flagged three regressions I'd shipped last week and never noticed. Output looked fine. It wasn't.\n\nYou can't eyeball a probabilistic system.\nIf you're not measuring it, you're just hoping in production."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "ai",
+          "llm",
+          "evals",
+          "testing",
+          "measurement",
+          "lesson"
+        ]
+      },
+      "why": "Specialist precision: names the failure mode (silent regressions in a probabilistic system). The closer is a rule, not a vibe. Credible to anyone shipping LLM features."
+    },
+    {
+      "id": "ex_035",
+      "commit": {
+        "type": "feat",
+        "message": "crossed 100 active users this week",
+        "domain": "product",
+        "trigger_signal": "user milestone"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "product_update",
+        "content": "Hit 100 active users this week.\n\nNumber two through ninety-nine were strangers.\nNumber one was me, testing the signup flow for the four-hundredth time.\n\nSmall number. Took a year. Counts anyway."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "milestone",
+          "users",
+          "product",
+          "journey",
+          "restraint"
+        ]
+      },
+      "why": "Restraint over celebration. The self-aware detail (user #1 was the founder) keeps it honest. The closer defends a small number without inflating it — the opposite of the anti-examples."
+    },
+    {
+      "id": "ex_036",
+      "commit": {
+        "type": "feat",
+        "message": "wrote first mobile code after years of backend-only work",
+        "domain": "mobile",
+        "trigger_signal": "stepped outside core competency to ship"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "founder_journey",
+        "content": "Wrote my first line of Swift this week after years of only touching backend.\n\nIt was slow, it was ugly, I shipped it anyway.\n\nBeing genuinely good at one thing makes the second thing a matter of weeks, not years.\n\nMost limits are just unfamiliarity you haven't sat with long enough."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "learning",
+          "specialization",
+          "founder",
+          "growth",
+          "mobile"
+        ]
+      },
+      "why": "Channels the founder's 'specialization is a comfortable lie' take, grounded in a real first-mobile-commit. not_this_week is true because the claim spans years, not one commit. Closer is a reframe of 'limits.'"
+    },
+    {
+      "id": "ex_037",
+      "commit": {
+        "type": "feat",
+        "message": "add structured logging and tracing, surfaced a daily error nobody had seen",
+        "domain": "backend",
+        "trigger_signal": "instrumentation revealed a hidden problem"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "I added tracing to our backend this week and immediately found an error that had been firing a few hundred times a day for two months.\n\nNo user had reported it. No alert had caught it. It just sat there, quietly degrading a flow we thought was healthy.\n\nThe uncomfortable part: nothing changed this week to create that bug. The only thing that changed is that I could finally see it.\n\nYou are not running the system you think you're running. You're running the one your instrumentation can show you.\n\nIf you can't see it, you're guessing. And you'll defend the guess because it's all you have."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "observability",
+          "tracing",
+          "logging",
+          "backend",
+          "lesson",
+          "instrumentation"
+        ]
+      },
+      "why": "Specialist credibility through a precise, unsettling observation. The lesson — you run the system you can observe — is transferable beyond this stack. Quote-worthy close for LinkedIn."
+    },
+    {
+      "id": "ex_038",
+      "commit": {
+        "type": "fix",
+        "message": "fix migration that locked a large table in production",
+        "domain": "database",
+        "trigger_signal": "routine change that caused production downtime"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Ran a 'quick' migration on a big table today.\n\nIt locked the table.\nThe app went read-only.\nThe quick migration took the site down for nine minutes.\n\nThere is no such thing as a quick change to production data. Only ones that haven't bitten you yet."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "database",
+          "migration",
+          "production",
+          "downtime",
+          "lesson"
+        ]
+      },
+      "why": "The escalating three-line structure builds the dread. 'Quick' in scare quotes is the whole joke. The closer is a hard-won rule any backend founder recognises instantly."
+    },
+    {
+      "id": "ex_039",
+      "commit": {
+        "type": "feat",
+        "message": "ship revenue-generating feature after weeks of infra work",
+        "domain": "product",
+        "trigger_signal": "shipped something that actually moves the business"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "industry_observation",
+        "content": "Every founder I talked to this week led with their stack, their raise, or their hours.\n\nNone of them led with what they'd shipped or who was using it.\n\nThe metric you reach for first tells you what you're actually optimising for.\n\nMine used to be hours. I'm trying to make it users."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "founder",
+          "vanity metrics",
+          "fundraising",
+          "users",
+          "observation"
+        ]
+      },
+      "why": "Direct descendant of the founder's tweet on what founders talk about vs what they deliver. The last line turns the observation inward, which keeps it from being a smug call-out. not_this_week: drawn from a week of conversations, not a single commit."
+    },
+    {
+      "id": "ex_040",
+      "commit": {
+        "type": "feat",
+        "message": "ship feature after seriously considering shelving the whole project",
+        "domain": "product",
+        "trigger_signal": "shipped through a low point"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "mentor",
+        "content_type": "founder_journey",
+        "content": "Three weeks ago I had a serious conversation with myself about shutting this down.\n\nNot because it was failing. Because the gap between the work and the visible results had gotten wide enough to feel pointless.\n\nI didn't shut it down. I shipped one small, concrete thing instead. Then another. This week a user emailed to say it solved a problem they'd had for a year.\n\nMotivation didn't come back first and then I worked. I worked, and the motivation followed the evidence.\n\nIf you're in the wide gap right now: don't wait to feel like it. Ship the smallest real thing you can. Let the evidence do the convincing."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "founder",
+          "motivation",
+          "low point",
+          "shipping",
+          "journey",
+          "lesson"
+        ]
+      },
+      "why": "Honest about the low point without melodrama, and the lesson inverts the usual order (action precedes motivation). Soft, earned CTA at the end fits LinkedIn without being engagement-bait."
+    },
+    {
+      "id": "ex_041",
+      "commit": {
+        "type": "fix",
+        "message": "fix stale cache serving old data after updates",
+        "domain": "backend",
+        "trigger_signal": "classic cache invalidation bug"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "Users kept seeing old data after saving.\n\nNot a save bug. Not a read bug.\nA cache that was very confidently serving yesterday's answer.\n\nThe cache wasn't broken. It was doing exactly what I told it to. I just told it the wrong thing."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "caching",
+          "invalidation",
+          "backend",
+          "debugging",
+          "lesson"
+        ]
+      },
+      "why": "Reframes the bug as a self-inflicted instruction problem, not a system failure — the more honest and more transferable framing. Avoids needing the reader to know caching internals."
+    },
+    {
+      "id": "ex_042",
+      "commit": {
+        "type": "feat",
+        "message": "gate new pipeline behind feature flag, 5% rollout caught a data bug",
+        "domain": "backend",
+        "trigger_signal": "progressive rollout caught a problem before full release"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "Shipped a rewrite behind a flag. Rolled it to 5% of traffic.\n\nThat 5% surfaced a data bug that would have corrupted records for everyone at 100%.\n\nFeature flags aren't a process nicety.\nThey're the difference between a bug report and an incident."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "feature flags",
+          "rollout",
+          "backend",
+          "risk",
+          "lesson"
+        ]
+      },
+      "why": "Specialist voice: precise about the mechanism and the stakes. The closer reframes a tool as risk management, which is the actual value. The 5%/100% contrast does the persuading."
+    },
+    {
+      "id": "ex_043",
+      "commit": {
+        "type": "refactor",
+        "message": "remove feature used by a small but vocal minority",
+        "domain": "product",
+        "trigger_signal": "sunset a feature against user noise"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "product_update",
+        "content": "Removed a feature today that 4% of users loved.\n\nThey were loud. The data was quiet.\n\nKilling things you built is harder than building them, because you remember the work and the user only sees the result.\n\nThe product is what's left after you cut."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "product",
+          "sunset",
+          "focus",
+          "founder",
+          "decision",
+          "lesson"
+        ]
+      },
+      "why": "Contrarian founder move — shipping as deleting. The loud-minority/quiet-data tension is the hook. Closer is a definition, not a celebration."
+    },
+    {
+      "id": "ex_044",
+      "commit": {
+        "type": "feat",
+        "message": "ship small improvements every day for 30 days straight",
+        "domain": "product",
+        "trigger_signal": "consistent small progress over a long stretch"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "founder",
+        "content_type": "industry_observation",
+        "content": "Thirty days of shipping one small thing a day. None of it was impressive on its own.\n\nNo single commit this month would make a good post. A typo fix here, a slightly better empty state there, an error message that finally makes sense.\n\nBut put thirty of those next to each other and the product is visibly better than it was a month ago, and I can't point to the day it changed.\n\nThat's the part nobody posts about, because it doesn't photograph well. The work that compounds is rarely the work that looks like anything on any given day.\n\nConsistency isn't a virtue. It's just the only thing that actually compounds."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": true,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "consistency",
+          "compounding",
+          "founder",
+          "shipping",
+          "process",
+          "observation"
+        ]
+      },
+      "why": "Founder-voice observation that doubles as a quiet argument for the product's own premise (small work compounds) without ever naming the product. not_this_week spans 30 days. The closer reframes consistency as mechanics, not morality."
+    },
+    {
+      "id": "ex_045",
+      "commit": {
+        "type": "feat",
+        "message": "add fallback so app stays usable when third-party API is down",
+        "domain": "reliability",
+        "trigger_signal": "built resilience after a dependency failure"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "builder",
+        "content_type": "technical_lesson",
+        "content": "A third-party API went down and took half my app with it.\n\nSpent today making sure that can't happen again: if they're down, we degrade instead of die.\n\nEvery external dependency is a small bet that someone else stays up. Build like you'll lose that bet eventually."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "reliability",
+          "dependencies",
+          "fallback",
+          "resilience",
+          "lesson"
+        ]
+      },
+      "why": "Echoes the founder's third-party-dependency anecdote from the source posts. Concrete cause, concrete fix, then a closer that generalises dependencies into bets you should expect to lose."
+    },
+    {
+      "id": "ex_046",
+      "commit": {
+        "type": "perf",
+        "message": "add composite index, query dropped from 4s to 30ms",
+        "domain": "database",
+        "trigger_signal": "large measurable query speedup from one change"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "specialist",
+        "content_type": "technical_lesson",
+        "content": "A query that took 4 seconds now takes 30 milliseconds.\n\nThe fix was one index.\n\nThe hard part wasn't writing it. It was admitting I'd been blaming the framework for six weeks for something the database told me on day one if I'd looked at the query plan."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": true,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "database",
+          "index",
+          "performance",
+          "query plan",
+          "lesson"
+        ]
+      },
+      "why": "Big metric earns the open; the real lesson is the misattribution (blaming the framework). Specialist precision (query plan) signals expertise without a tutorial."
+    },
+    {
+      "id": "ex_047",
+      "commit": {
+        "type": "feat",
+        "message": "raise prices, first customer churns over it",
+        "domain": "pricing",
+        "trigger_signal": "pricing decision with immediate customer reaction"
+      },
+      "post": {
+        "platform": "X",
+        "voice": "founder",
+        "content_type": "founder_journey",
+        "content": "Raised prices this week. Lost my second-ever customer over it within an hour.\n\nIt stung more than the revenue justified.\n\nThen three new signups came in at the higher price and didn't blink.\n\nThe customer who leaves over price was usually telling you who you were priced for all along."
+      },
+      "metadata": {
+        "post_length": "short",
+        "has_metrics": false,
+        "not_this_week": false,
+        "retrieval_tags": [
+          "pricing",
+          "churn",
+          "founder",
+          "revenue",
+          "lesson"
+        ]
+      },
+      "why": "Honest about the emotional cost (it stung), then the reframe: churn-on-price is a positioning signal. Founder voice — blunt, slightly unsentimental, lands on a usable principle."
+    },
+    {
+      "id": "ex_048",
+      "commit": {
+        "type": "chore",
+        "message": "merge main into feature branch, resolve conflicts",
+        "domain": "maintenance",
+        "trigger_signal": "routine version-control housekeeping, no product change"
+      },
+      "post": {
+        "platform": "skip",
+        "voice": "n/a",
+        "content_type": "skip",
+        "content": ""
+      },
+      "metadata": {
+        "post_length": "n/a",
+        "has_metrics": false,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "chore",
+          "merge",
+          "git",
+          "skip"
+        ]
+      },
+      "why": "Merges, conflict resolution, and branch housekeeping carry no narrative value. They feel like 'work' to the committer but mean nothing to a reader. Hard skip — generating from these trains users to ignore the feed."
+    },
+    {
+      "id": "ex_049",
+      "commit": {
+        "type": "docs",
+        "message": "update README badges and fix typo in contributing guide",
+        "domain": "maintenance",
+        "trigger_signal": "cosmetic documentation change"
+      },
+      "post": {
+        "platform": "skip",
+        "voice": "n/a",
+        "content_type": "skip",
+        "content": ""
+      },
+      "metadata": {
+        "post_length": "n/a",
+        "has_metrics": false,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "docs",
+          "readme",
+          "cosmetic",
+          "skip"
+        ]
+      },
+      "why": "Cosmetic docs changes are not progress worth announcing. Note: substantive docs (a real guide, a public API reference) can be worth a post — the skip is specifically for badge/typo-level churn. The model should not pattern-match all 'docs' commits to skip."
+    },
+    {
+      "id": "ex_050",
+      "commit": {
+        "type": "feat",
+        "message": "one year of building, reflecting on what shipped and what didn't",
+        "domain": "product",
+        "trigger_signal": "annual reflection milestone"
+      },
+      "post": {
+        "platform": "LinkedIn",
+        "voice": "founder",
+        "content_type": "founder_journey",
+        "content": "A year of building this, today.\n\nWhat I expected: a clean line from idea to product.\nWhat happened: roughly four restarts, one feature I was sure was the core that turned out to be a distraction, and a long stretch where the only thing keeping me going was that I'd already told too many people about it.\n\nThe idea was easy. I had it in an afternoon. The execution has taken a year and isn't close to done.\n\nIf you'd asked me a year ago, I'd have said the hard part was knowing what to build. It wasn't. The hard part was doing the unglamorous version of it, every day, after the excitement wore off.\n\nYou can hate that part. The debugging, the rewrites, the silence between milestones.\n\nYou just have to hate having nothing to show for the year more.\n\nStill wouldn't trade it."
+      },
+      "metadata": {
+        "post_length": "long",
+        "has_metrics": false,
+        "not_this_week": true,
+        "retrieval_tags": [
+          "founder",
+          "annual",
+          "reflection",
+          "journey",
+          "execution",
+          "honest"
+        ]
+      },
+      "why": "Capstone founder post that braids three of the source voice's signature lines (idea is easy/execution brutal; you have to hate having nothing more; still wouldn't trade it) into one coherent year-in-review. not_this_week spans a year. Honest, unsentimental, and unmistakably the founder's voice rather than a generic anniversary post."
+    }
+  ],
+  "anti_examples": [
+    {
+      "id": "anti_001",
+      "commit_message": "add user authentication",
+      "bad_post": "🚀 Just implemented user authentication in my latest project! Security first approach with JWT tokens and bcrypt hashing. Super proud of how this turned out! #WebDev #Security #Coding #BuildInPublic #100DaysOfCode",
+      "why_bad": "Emoji-led opener. Hashtag soup. Could have been written by anyone about anything. 'Super proud' is empty filler. No tension, no lesson, no specific detail that makes it credible. This is the default GPT-4o-mini output. Never produce this."
+    },
+    {
+      "id": "anti_002",
+      "commit_message": "fix performance issue",
+      "bad_post": "Grinding through performance optimizations today 💪 Every line of code is a step closer to the dream! Keep pushing, builders — the only limit is your mindset. What are you building today? Drop it below! 👇 #Motivation #StartupLife #BuildInPublic",
+      "why_bad": "Motivational content disconnected from any specific work. Engagement bait ('drop it below'). 'Every line of code is a step closer to the dream' is the kind of sentence that makes technical founders cringe and unfollow. Zero credibility signal."
+    },
+    {
+      "id": "anti_003",
+      "commit_message": "working on new feature",
+      "bad_post": "Something big is coming 🔥 Can't wait to share what we've been building. Stay tuned! This is going to change everything. 👀 #Startup #BuildingInPublic #ComingSoon",
+      "why_bad": "Vague announcement with no substance. Teasing without content is the lowest-value post type. 'Change everything' is a credibility-destroying phrase. 'Stay tuned' assumes the audience is already invested. They are not."
+    },
+    {
+      "id": "anti_004",
+      "commit_message": "fix various bugs, improve stability",
+      "bad_post": "Another day, another set of bugs crushed! 🐛 The grind never stops when you're building something great. Shoutout to all the developers out there pushing through the late nights and early mornings. We're all in this together! 💙 #DevLife #Grind #BuildInPublic",
+      "why_bad": "Grind culture performance. No specific detail from any actual work. 'We're all in this together' is hollow community signalling. Every sentence could apply to any developer on any day. Produces noise, not signal."
+    },
+    {
+      "id": "anti_005",
+      "commit_message": "deploy v2.0 to production",
+      "bad_post": "🎉 HUGE ANNOUNCEMENT 🎉 We just shipped v2.0! This has been months in the making and we couldn't be more excited! Packed with features our amazing community asked for! Thank you to everyone who believed in us on this journey! 💫 Link in bio! #Launch #Startup #Grateful",
+      "why_bad": "Over-punctuated excitement with no substance. 'Couldn't be more excited' is a cliche that signals nothing. 'Amazing community' and 'believed in us' is performative gratitude. What shipped? What does it do? Why does it matter? None of these questions are answered. This is an announcement that tells you nothing."
+    },
+    {
+      "id": "anti_006",
+      "commit_message": "refactor module",
+      "bad_post": "Unpopular opinion: 90% of the code you've written is garbage and you know it. 🧵 A thread on why everything your CS degree taught you is wrong (1/14)",
+      "why_bad": "Contrarian as a costume. This mimics the founder's reframe instinct but with zero specific work behind it — there is no commit, no detail, no earned insight. The thread-tease ('1/14') and the manufactured 'unpopular opinion' framing are engagement-bait. Contrarian only works when a real, specific experience earns it. This is a take pretending to be a lesson."
+    },
+    {
+      "id": "anti_007",
+      "commit_message": "fix billing bug",
+      "bad_post": "Almost quit today. Then I remembered why I started. 🙏 We just crossed a milestone I can't share yet but trust me it's big. Never give up, founders. The grind is worth it. 💪",
+      "why_bad": "Manufactured vulnerability used as a setup for a humblebrag ('a milestone I can't share'). 'Never give up' and 'the grind is worth it' are non-lessons — the exact hustle-performance the founder voice rejects. No specific work, no real takeaway, withheld 'big news' to bait curiosity. The founder voice is honest about lows without monetising them for engagement."
+    }
+  ]
+}
