@@ -92,13 +92,18 @@ Plain-language trace:
 ### 3.4 Generation pipeline (the AI Model node)
 This is a **multi-step pipeline**, not one prompt. Each step is independently observable and re-runnable. **Generation is user-triggered [DECIDED]:** commit ingestion (§3.1) and filtering (§3.2) run continuously in the background, but the pipeline below fires when the user asks for posts (e.g. "draft from this week's work") — not automatically per push or on a cadence. The background part is collecting and grading the raw material; the user decides when to turn it into drafts.
 
-1. **Group** — cluster the candidate commits (by PR, time window, file/feature overlap, semantic similarity) into one or more narrative units.
-2. **Infer intent** — for each group, derive the *why*: what problem, what changed for the user, why it matters.
-3. **Draft** — write the post, grounded in retrieved voice examples + preferences + content-type intent (founder-led / marketing / feature / poll).
-4. **Shape per platform** — produce LinkedIn and X variants from the same source story (reflective/lesson-framed vs punchy/direct).
-5. **Recommend schedule time** — propose a send time using past-performance signals (best-performing windows for this user/platform), with a sensible cold-start default. **[ASSUMPTION: rule-based on past performance first; learned model later.]**
+**Generation is gated and batched, not exhaustive [DECIDED]:** drafting every candidate group that survives commit-level filtering would waste tokens on stories the user never sees or wouldn't use. Grouping and significance scoring run once, cheaply, over the full candidate set; only a small batch is actually drafted, and more is drafted on demand as the user works through what's already there.
 
-Use a durable, step-based workflow so a failure in step 4 doesn't lose steps 1–3, and so we can replay a single step when we improve a prompt.
+1. **Group** — cluster the candidate commits (by PR, time window, file/feature overlap, semantic similarity) into one or more narrative units.
+2. **Score & gate** — score each group's narrative significance (effort, novelty, story completeness) with cheap heuristics; drop groups that don't clear a tunable bar. Survivors form a **ranked candidate backlog** — scored, but not yet drafted.
+3. **Infer intent** — for the groups in the current batch (see Batching below), derive the *why*: what problem, what changed for the user, why it matters.
+4. **Draft** — write the post, grounded in retrieved voice examples + preferences + content-type intent (founder-led / marketing / feature / poll).
+5. **Shape per platform** — produce LinkedIn and X variants from the same source story (reflective/lesson-framed vs punchy/direct).
+6. **Recommend schedule time** — propose a send time using past-performance signals (best-performing windows for this user/platform), with a sensible cold-start default. **[ASSUMPTION: rule-based on past performance first; learned model later.]**
+
+**Batching:** steps 3–6 only run for the top-K groups pulled off the backlog (e.g. 3–5 posts) **[ASSUMPTION: exact K and the significance threshold are tunable, default conservative]**, not the whole backlog. As the user swipes/reviews through the current batch (§3.6) and approaches the end, replenish by pulling the next-ranked group(s) off the backlog and repeating steps 3–6 — triggered before the batch is fully exhausted, so there's no dead wait.
+
+Use a durable, step-based workflow so a failure in one step doesn't lose prior steps, and so we can replay a single step when we improve a prompt.
 
 ### 3.5 The 20 human-written commit→post examples — **few-shot exemplars** [DECIDED]
 We have 20 gold examples of commits mapped to the posts a human wrote from them. **Use them as few-shot exemplars:** at draft time (§3.4 step 3), retrieve the 2–3 most relevant examples — by content type and by similarity to the current commit group — and include them in the prompt to anchor structure, framing, and voice. Cheap, immediate quality lift, no training required.
@@ -110,7 +115,12 @@ Implementation notes:
 
 ### 3.6 Review, edit, schedule (Select/Edit Posts → Social Media Feed)
 - User sees drafts (per platform), edits inline, approves or rejects.
-- **Every edit and every reject is a training signal** — diff the user's edit against our draft and store it. This is the cheapest, richest voice/quality signal we get. Capture it from day one even if we don't use it yet.
+- **Swipe-based review drives replenishment [DECIDED]:** the review UI works through the current batch card-by-card; as the user swipes/selects through most of it, that's the signal that tells the generation pipeline (§3.4) to draft the next batch from the candidate backlog. This is the mechanism that keeps token spend tied to actual engagement instead of upfront speculative generation.
+- **Every edit and every reject is a training signal, fed back three ways [DECIDED]:**
+  1. **Retrieval, immediate** — on approval, embed the final `edited_text` (not the original `generated_text`) into the voice corpus, the same retrieval pool as the 20 seed exemplars (§3.5). Future drafts pull from what the user actually approved, not the AI's first pass.
+  2. **Guideline extraction, periodic** — a scheduled job (§3.7) reads accumulated `post_edits` diffs and summarizes recurring corrections (tone, structure, phrasing to avoid) into a compact voice-guidelines doc injected into the draft prompt (§3.4) alongside retrieved exemplars.
+  3. **Gating, indirect** — a reject has no "correct" version to retrieve, so instead of feeding the draft step it lowers the significance-gate score (§3.4) for similar future narrative groups and feeds the content-type/format preference model (§3.7).
+  Diff the user's edit against our draft and store it (`post_edits`) from day one — even before the guideline-extraction job exists — so there's no gap in the signal once it's built.
 - Approved posts get scheduled. **Publishing is staged [DECIDED]:**
   - **MVP — share-out, no API publish.** The app generates the platform-shaped post; the user reviews/edits, then taps a **share button** that hands the text off to the target platform (native share sheet / platform share intent / one-tap copy-and-open). No write-access API integration required to ship. This sidesteps the LinkedIn/X API approval risk entirely (§6) and lets us validate output quality first.
   - **Target architecture — approve → schedule → auto-publish.** Once platform write access is in place, approved posts enter a scheduled-publish queue that posts at the recommended/chosen time via the platform APIs. The data model (`posts.status`, `scheduled_time`, `external_post_id`) already supports this so the MVP doesn't paint us into a corner.
@@ -120,6 +130,8 @@ Implementation notes:
 - After publish, periodically pull engagement metrics per post (impressions, reactions, comments, reshares, clicks where available).
 - Aggregate into per-user "past performance": which content types, formats, lengths, topics, and time windows perform.
 - Feed this into (a) schedule-time recommendation and (b) generation as soft guidance ("your teardown-style posts outperform announcements"). Store published post text back into the voice corpus.
+- **Voice-guidelines summarization job [DECIDED, cadence ASSUMPTION]:** on a periodic cadence (e.g. weekly, or after N new edits accrue), summarize accumulated `post_edits` diffs into a short, human-readable voice-guidelines doc and refresh it in the draft prompt (§3.6). This is what turns raw diffs into a usable signal without fine-tuning — same job family as the performance aggregation above, just diff-sourced instead of metrics-sourced.
+- **Reject-driven preference signal [DECIDED]:** a reject is a negative signal on *what to surface*, not *how to phrase it* — it lowers the significance-gate score (§3.4) for similar groups and rolls into the same content-type/format preference model this section builds from performance metrics.
 
 ---
 
@@ -128,9 +140,9 @@ Implementation notes:
 - `users`, `accounts` (auth + billing tier: solo / team seat)
 - `github_installations`, `repos`
 - `commits` (raw, immutable) — sha, repo_id, message, files, stats, ts, relevance_score, relevance_reason
-- `commit_groups` — narrative units; many-to-many with commits; inferred_intent
+- `commit_groups` — narrative units; many-to-many with commits; `significance_score`, `status` (pending / gated_out / queued / drafted), `inferred_intent` (populated once drafted) — the ranked candidate backlog (§3.4) lives here, distinct from `posts`
 - `preferences` — product_name, theme, enabled_content_types, platform settings (JSON)
-- `voice_documents` — source type (website/past_post/upload), raw text, metadata
+- `voice_documents` — source type (website/past_post/upload/voice_guidelines), raw text, metadata — the periodically-refreshed guidelines doc (§3.7) lives here alongside the corpus it's summarized from
 - `embeddings` — pgvector; polymorphic ref to voice_documents / published posts
 - `posts` — group_id, platform, status (draft/approved/scheduled/published/rejected), generated_text, edited_text, recommended_time, scheduled_time, published_at, external_post_id
 - `post_edits` — draft vs final diff (training signal)
@@ -162,7 +174,7 @@ Implementation notes:
 
 ## 7. Suggested phasing
 The MVP is a progressive slice we build toward the full shape — not the final product.
-- **MVP (prove the moat):** GitHub connect → continuous background ingestion + relevance filter → **user-triggered** generation (group + intent + draft) → LinkedIn + X variants grounded in the 20 few-shot exemplars + voice corpus → review/edit → **share button** hand-off to the platform (no API publish). Capture every edit/reject signal.
+- **MVP (prove the moat):** GitHub connect → continuous background ingestion + relevance filter → **user-triggered** generation (group → score/gate → batch-draft intent + draft) → LinkedIn + X variants grounded in the 20 few-shot exemplars + voice corpus → swipe-based review/edit, replenishing the batch as the user works through it → **share button** hand-off to the platform (no API publish). Capture every edit/reject signal.
 - **V1:** approve → schedule → **auto-publish via platform APIs**, performance ingestion, schedule-time recommendation from real data.
 - **V2:** voice fine-tuning / preference learning from accumulated accept/edit/performance signals; smarter grouping; optional cadence-based draft suggestions on top of manual triggering.
 
@@ -174,12 +186,12 @@ The MVP is a progressive slice we build toward the full shape — not the final 
 - **20 examples** → few-shot exemplars, retrieved per draft (§3.5).
 - **MVP publishing** → generate + share-button hand-off; target architecture is approve → schedule → auto-publish, built behind one abstraction (§3.6).
 - **Generation trigger** → user-triggered; ingestion/filtering run in the background (§3.4).
+- **Generation gating & batching** → score/gate candidate groups for narrative significance before drafting; draft only a small batch up front and replenish from the ranked backlog as the user swipes through it, so token spend tracks actual engagement, not speculative coverage (§3.4/§3.6). This also resolves **Q7** below: scope isn't a fixed time window, it's whatever clears the significance gate.
 
 **Still open — confirm before building the relevant slice:**
 1. **[Q1] LLM + embeddings provider** — pick the generation and embedding providers, and whether to abstract behind a router from day one.
 2. **[Q4] Voice strategy** — RAG-from-corpus only for now, vs. plan for a per-user fine-tune once enough accept/edit data accrues.
 3. **[Q6] Team seats** — multiple contributors / one repo → one shared voice or per-author voices?
-4. **[Q7] "This week's work" definition** — when the user triggers generation, what's the default window/scope of commits we pull (since last drafted? last 7 days? a selectable range)?
 
 ---
 *Last updated: June 2026 — implementation brief, subject to revision.*
