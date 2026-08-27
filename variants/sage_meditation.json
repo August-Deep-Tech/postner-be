@@ -1,0 +1,10 @@
+{
+  "id": "sage_meditation",
+  "label": "Sage Meditation",
+  "css_vars": {
+    "--bg": "#EAE6DA",
+    "--text": "#324A32",
+    "--accent": "#6B8E23",
+    "--accent-shape": "#556B2F"
+  }
+}

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #F3F0E8;
+      --text: #0B0B0B;
+      --accent: #3B6FD8;
+      --accent-shape: #3B6FD8;
+      --on-accent: #FFFFFF;
+      --font-serif: "Playfair Display", Georgia, serif;
+      --font-sans: "Inter", system-ui, sans-serif;
+      --bar-width: 30%;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    #canvas {
+      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
+      display: grid; grid-template-columns: 1fr var(--bar-width); position: relative;
+    }
+    .content {
+      padding: 100px 72px 90px 96px;
+      display: flex; flex-direction: column; min-width: 0;
+    }
+    .brand {
+      font-family: var(--font-sans); font-weight: 700; font-size: 26px;
+      letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent);
+    }
+    .main {
+      flex: 1 1 auto; display: flex; flex-direction: column;
+      justify-content: center; gap: 40px; padding-right: 24px;
+      margin-top: -20px;
+    }
+    .title {
+      font-family: var(--font-serif); font-weight: 600; font-size: 64px;
+      line-height: 1.1; letter-spacing: -0.02em; white-space: pre-line;
+      max-width: 620px;
+    }
+    .body {
+      font-family: var(--font-sans); font-weight: 400; font-size: 30px;
+      line-height: 1.45; white-space: pre-line; max-width: 580px;
+    }
+    .body + .body { margin-top: -8px; }
+    .page {
+      font-family: var(--font-sans); font-weight: 600; font-size: 28px;
+      color: var(--accent);
+    }
+    .bar { background: var(--accent-shape); width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="canvas">
+    <div class="content">
+      <div class="brand">{{brand}}</div>
+      <div class="main">
+        <h1 class="title">{{title}}</h1>
+        <p class="body">{{body}}</p>
+        <p class="body">{{body_2}}</p>
+      </div>
+      <div class="page">{{page_number}}</div>
+    </div>
+    <div class="bar" aria-hidden="true"></div>
+  </div>
+</body>
+</html>

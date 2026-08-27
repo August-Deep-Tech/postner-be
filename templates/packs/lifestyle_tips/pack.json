@@ -1,0 +1,50 @@
+{
+  "id": "lifestyle_tips",
+  "label": "Lifestyle Tips",
+  "format": "ig_portrait",
+  "description": "4-page cream editorial carousel: cover peek + two tip spreads + closing handle. Warm neutrals, serif + script + sans. One lifestyle photo per page.",
+  "default_brand": "",
+  "css_vars": {
+    "--bg": "#F7F4EE",
+    "--text": "#2A2623",
+    "--accent": "#2A2623",
+    "--accent-shape": "#2A2623",
+    "--on-accent": "#F7F4EE",
+    "--muted": "#5C5650"
+  },
+  "pages": [
+    {
+      "id": "cover",
+      "file": "01_cover.html",
+      "role": "cover",
+      "tags": ["cover", "peek_image", "swipe", "script"],
+      "images": 1,
+      "fields": ["script", "title"]
+    },
+    {
+      "id": "tip_left",
+      "file": "02_tip_left.html",
+      "role": "body",
+      "tags": ["body", "image_left", "numbered", "next"],
+      "images": 1,
+      "fields": ["page_number", "title", "body", "next"]
+    },
+    {
+      "id": "tip_right",
+      "file": "03_tip_right.html",
+      "role": "body",
+      "tags": ["body", "image_right", "numbered", "next"],
+      "images": 1,
+      "fields": ["page_number", "title", "body", "next"]
+    },
+    {
+      "id": "closing",
+      "file": "04_closing.html",
+      "role": "close",
+      "tags": ["close", "image_left", "handle", "numbered"],
+      "images": 1,
+      "fields": ["page_number", "title", "body", "handle"]
+    }
+  ],
+  "sequence": ["cover", "tip_left", "tip_right", "closing"]
+}

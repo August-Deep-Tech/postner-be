@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #F3F0E8;
+      --text: #0B0B0B;
+      --accent: #3B6FD8;
+      --accent-shape: #3B6FD8;
+      --on-accent: #FFFFFF;
+      --font-serif: "Playfair Display", Georgia, serif;
+      --font-sans: "Inter", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    #canvas {
+      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 110px 100px 120px; text-align: center;
+    }
+    .brand {
+      font-family: var(--font-sans); font-weight: 700; font-size: 28px;
+      letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent);
+    }
+    .main {
+      flex: 1 1 auto; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; width: 100%;
+      max-width: 880px; margin-top: -20px;
+    }
+    .title {
+      font-family: var(--font-serif); font-weight: 600; font-size: 88px;
+      line-height: 1.08; letter-spacing: -0.02em; white-space: pre-line;
+    }
+    .cta {
+      font-family: var(--font-sans); font-weight: 700; font-size: 26px;
+      letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+      white-space: pre-line; line-height: 1.45; max-width: 760px;
+      margin-top: auto; padding-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas">
+    <div class="brand">{{brand}}</div>
+    <div class="main">
+      <h1 class="title">{{title}}</h1>
+    </div>
+    <p class="cta">{{cta}}</p>
+  </div>
+</body>
+</html>

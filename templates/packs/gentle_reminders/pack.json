@@ -1,0 +1,65 @@
+{
+  "id": "gentle_reminders",
+  "label": "Gentle Reminders",
+  "format": "ig_portrait",
+  "description": "6-page editorial carousel (text-only). Cream + royal blue, serif headlines, sans body.",
+  "default_brand": "",
+  "css_vars": {
+    "--bg": "#F3F0E8",
+    "--text": "#0B0B0B",
+    "--accent": "#3B6FD8",
+    "--accent-shape": "#3B6FD8",
+    "--on-accent": "#FFFFFF"
+  },
+  "pages": [
+    {
+      "id": "cover",
+      "file": "01_cover.html",
+      "role": "cover",
+      "tags": ["cover", "centered", "arrow", "no_page"],
+      "images": 0,
+      "fields": ["brand", "title", "subtitle"]
+    },
+    {
+      "id": "intro",
+      "file": "02_body_centered.html",
+      "role": "body",
+      "tags": ["body", "centered", "numbered"],
+      "images": 0,
+      "fields": ["brand", "title", "body", "body_emphasis", "page_number"]
+    },
+    {
+      "id": "split_left",
+      "file": "03_split_left.html",
+      "role": "body",
+      "tags": ["body", "split", "left_cream", "right_bar", "numbered"],
+      "images": 0,
+      "fields": ["brand", "title", "body", "body_2", "page_number"]
+    },
+    {
+      "id": "solid_accent",
+      "file": "04_solid_accent.html",
+      "role": "body",
+      "tags": ["body", "solid", "accent", "numbered"],
+      "images": 0,
+      "fields": ["brand", "title", "body", "page_number"]
+    },
+    {
+      "id": "split_right",
+      "file": "05_split_right.html",
+      "role": "body",
+      "tags": ["body", "split", "left_accent", "right_strip", "numbered"],
+      "images": 0,
+      "fields": ["brand", "title", "body", "page_number"]
+    },
+    {
+      "id": "closing",
+      "file": "06_closing.html",
+      "role": "close",
+      "tags": ["close", "centered", "cta", "no_page"],
+      "images": 0,
+      "fields": ["brand", "title", "cta"]
+    }
+  ],
+  "sequence": ["cover", "intro", "split_left", "solid_accent", "split_right", "closing"]
+}

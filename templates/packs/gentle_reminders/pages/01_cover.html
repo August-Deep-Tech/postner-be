@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #F3F0E8;
+      --text: #0B0B0B;
+      --accent: #3B6FD8;
+      --accent-shape: #3B6FD8;
+      --on-accent: #FFFFFF;
+      --font-serif: "Playfair Display", Georgia, serif;
+      --font-sans: "Inter", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    #canvas {
+      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 110px 96px 100px; text-align: center; position: relative;
+    }
+    .brand {
+      font-family: var(--font-sans); font-weight: 700; font-size: 28px;
+      letter-spacing: 0.28em; text-transform: uppercase; color: var(--accent);
+      flex: 0 0 auto;
+    }
+    .main {
+      flex: 1 1 auto; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 48px; width: 100%;
+      max-width: 860px; margin-top: -40px;
+    }
+    .title {
+      font-family: var(--font-serif); font-weight: 600; font-size: 92px;
+      line-height: 1.05; letter-spacing: -0.02em; white-space: pre-line;
+    }
+    .subtitle {
+      font-family: var(--font-sans); font-weight: 400; font-size: 34px;
+      line-height: 1.35; white-space: pre-line; max-width: 720px;
+    }
+    .arrow {
+      flex: 0 0 auto; width: 168px; height: 56px; color: var(--accent);
+      margin-top: 8px;
+    }
+    .arrow svg { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <div id="canvas">
+    <div class="brand">{{brand}}</div>
+    <div class="main">
+      <h1 class="title">{{title}}</h1>
+      <p class="subtitle">{{subtitle}}</p>
+    </div>
+    <!-- Hand-drawn / crayon swipe cue -->
+    <div class="arrow" aria-hidden="true">
+      <svg viewBox="0 0 168 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 30c28-2 56-1 84 0 18.5.7 37 2.2 55 1.5" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"
+          style="stroke-dasharray: 2 0; filter: url(#rough);" />
+        <path d="M128 12c10 8 18 14 26 18-10 2-20 8-30 16" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+        <defs>
+          <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.2"/></filter>
+        </defs>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

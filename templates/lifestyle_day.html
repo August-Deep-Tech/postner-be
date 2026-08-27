@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    :root {
+      --bg: #1a1a1a;
+      --text: #fff6c8;
+      --accent: #ffffff;
+      --accent-shape: rgba(255, 255, 255, 0.28);
+      --font-family: "Archivo Black", sans-serif;
+      --font-ui: "Inter", sans-serif;
+      --pill-bg: rgba(40, 40, 40, 0.42);
+      --pill-border: rgba(255, 255, 255, 0.55);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    #canvas {
+      position: relative;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-family);
+    }
+
+    .hero {
+      position: absolute;
+      inset: 0;
+    }
+
+    .hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.15) 0%,
+        rgba(0, 0, 0, 0.05) 40%,
+        rgba(0, 0, 0, 0.35) 100%
+      );
+      pointer-events: none;
+    }
+
+    /* Source caption — replaced by engine, then split by script */
+    #caption-source {
+      display: none;
+    }
+
+    .cta-link {
+      display: none;
+    }
+
+    .stage {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      padding: 160px 72px 120px;
+      display: grid;
+      grid-template-rows: 1fr 1fr 1fr 1fr;
+      align-items: center;
+    }
+
+    .row {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-height: 0;
+    }
+
+    .row.left {
+      align-items: flex-start;
+      padding-right: 18%;
+    }
+
+    .row.right {
+      align-items: flex-end;
+      padding-left: 18%;
+      text-align: right;
+    }
+
+    .row.mid-left {
+      align-items: flex-start;
+      padding-right: 28%;
+      margin-top: -24px;
+    }
+
+    .row.mid-right {
+      align-items: flex-end;
+      padding-left: 22%;
+      text-align: right;
+      margin-top: -40px;
+    }
+
+    .word-block {
+      font-size: clamp(72px, 11vw, 148px);
+      line-height: 0.92;
+      letter-spacing: -0.04em;
+      text-transform: lowercase;
+      color: var(--text);
+      text-shadow: 0 2px 24px rgba(0, 0, 0, 0.18);
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .word-block:empty,
+    .row:has(.word-block:empty):not(:has(.pill:not([hidden]))) {
+      display: none;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 100%;
+      padding: 14px 22px;
+      border-radius: 999px;
+      border: 1.5px solid var(--pill-border);
+      background: var(--pill-bg);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      color: var(--accent);
+      font-family: var(--font-ui);
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .pill[hidden] {
+      display: none !important;
+    }
+
+    .pill svg {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .pill span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas">
+    <div class="hero">
+      <img src="{{image_url}}" alt="" />
+    </div>
+
+    <div id="caption-source">{{caption}}</div>
+    <a class="cta-link" id="cta-source" href="{{cta_link}}">{{cta_link}}</a>
+
+    <!-- Optional site pill override; unresolved {{badge_1}} falls back to CTA hostname -->
+    <div id="badge-overrides" hidden>
+      <span id="badge-1">{{badge_1}}</span>
+    </div>
+
+    <div class="stage" aria-label="overlay">
+      <div class="row left">
+        <div class="word-block" data-slot="0"></div>
+        <div class="pill" id="site-pill" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11z" />
+            <circle cx="12" cy="10" r="2.5" />
+          </svg>
+          <span></span>
+        </div>
+      </div>
+
+      <div class="row right">
+        <div class="word-block" data-slot="1"></div>
+      </div>
+
+      <div class="row mid-left">
+        <div class="word-block" data-slot="2"></div>
+      </div>
+
+      <div class="row mid-right">
+        <div class="word-block" data-slot="3"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function cleanCaption(raw) {
+        return String(raw || "")
+          .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, " ")
+          .replace(/[#*_`]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      /**
+       * Split a long overlay into 4 staggered slots (matches "one / day / in my / life").
+       * Prefer short top/bottom singles and let the middle absorb leftover words.
+       */
+      function splitIntoFour(words) {
+        const n = words.length;
+        const empty = ["", "", "", ""];
+        if (!n) return empty;
+        if (n === 1) return [words[0], "", "", ""];
+        if (n === 2) return [words[0], words[1], "", ""];
+        if (n === 3) return [words[0], words[1], words[2], ""];
+        if (n === 4) return words.slice();
+        if (n === 5) {
+          // classic: one | day | in my | life
+          return [words[0], words[1], words.slice(2, 4).join(" "), words[4]];
+        }
+
+        // Longer copy: ~1 / ~1 / middle chunk / last chunk
+        const first = words[0];
+        const second = words[1];
+        const rest = words.slice(2);
+        const cut = Math.max(1, Math.ceil(rest.length / 2));
+        const third = rest.slice(0, cut).join(" ");
+        const fourth = rest.slice(cut).join(" ");
+        return [first, second, third, fourth];
+      }
+
+      function unresolved(value) {
+        const v = String(value || "").trim();
+        if (!v) return true;
+        if (/^\{\{[^}]+\}\}$/.test(v)) return true;
+        return false;
+      }
+
+      function deriveSiteBadge(cta) {
+        try {
+          const u = new URL(cta);
+          return u.hostname.replace(/^www\./i, "").toUpperCase();
+        } catch (_) {
+          return "";
+        }
+      }
+
+      const source = document.getElementById("caption-source");
+      const ctaEl = document.getElementById("cta-source");
+      const words = cleanCaption(source ? source.textContent : "")
+        .split(" ")
+        .filter(Boolean);
+      const slots = splitIntoFour(words);
+
+      document.querySelectorAll("[data-slot]").forEach(function (el) {
+        const i = Number(el.getAttribute("data-slot"));
+        el.textContent = slots[i] || "";
+      });
+
+      const overrideEl = document.getElementById("badge-1");
+      const override = overrideEl ? overrideEl.textContent.trim() : "";
+      const derived = deriveSiteBadge(
+        ctaEl ? ctaEl.getAttribute("href") || ctaEl.textContent : ""
+      );
+      const label = unresolved(override) ? derived : override;
+
+      const pill = document.getElementById("site-pill");
+      if (pill) {
+        const span = pill.querySelector("span");
+        if (!label) {
+          pill.hidden = true;
+        } else {
+          if (span) span.textContent = label;
+          pill.hidden = false;
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "id": "calm_ocean",
+  "label": "Calm Ocean",
+  "css_vars": {
+    "--bg": "#D8F3FF",
+    "--text": "#1B3A4B",
+    "--accent": "#468FAF",
+    "--accent-shape": "#0077B6"
+  }
+}

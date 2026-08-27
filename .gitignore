@@ -4,3 +4,17 @@ dist/
 captures/
 *.log
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+docker-build*.log
+
+# Pipeline output (keep folder via .gitkeep)
+output/*
+!output/.gitkeep

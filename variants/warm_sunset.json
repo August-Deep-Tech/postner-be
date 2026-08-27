@@ -1,0 +1,10 @@
+{
+  "id": "warm_sunset",
+  "label": "Warm Sunset",
+  "css_vars": {
+    "--bg": "#FFEBE0",
+    "--text": "#2E1E1E",
+    "--accent": "#F26430",
+    "--accent-shape": "#FF4500"
+  }
+}
