@@ -96,6 +96,30 @@ class Brand(Base):
 
     tenant: Mapped[Tenant] = relationship(back_populates="brands")
     posts: Mapped[list[Post]] = relationship(back_populates="brand")
+    variants: Mapped[list[BrandVariant]] = relationship(back_populates="brand")
+
+
+class BrandVariant(Base):
+    """Per-brand color palette (CSS variables)."""
+
+    __tablename__ = "brand_variants"
+    __table_args__ = (
+        UniqueConstraint("brand_id", "slug", name="uq_brand_variant_brand_slug"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    brand_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("brands.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    slug: Mapped[str] = mapped_column(String(128), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    css_vars: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    brand: Mapped[Brand] = relationship(back_populates="variants")
 
 
 class Post(Base):

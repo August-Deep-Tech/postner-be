@@ -1,19 +1,30 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
+from app.auth.deps import AuthContext, get_current_auth
+from app.brands.service import get_tenant_brand
+from app.brands.variants import (
+    list_brand_variants,
+    seed_brand_variants_from_disk,
+    variant_to_dict,
+)
 from app.config import Settings, get_settings, has_llm_credentials
+from app.db.session import get_db
 from app.models.schemas import (
     HealthResponse,
     ListIdsResponse,
     ListPacksResponse,
+    ListVariantsResponse,
     PackSummary,
     ProposePacksRequest,
     ProposePacksResponse,
     ProposeVariantsRequest,
     ProposeVariantsResponse,
+    VariantOut,
 )
-from app.templates.engine import list_template_ids, list_variant_ids
+from app.templates.engine import list_template_ids
 from app.templates.packs import list_pack_ids, load_pack
 from app.templates.pack_propose import propose_and_save_packs
 from app.templates.variants import propose_and_save_variants
@@ -63,24 +74,45 @@ async def packs() -> ListPacksResponse:
     return ListPacksResponse(packs=summaries)
 
 
-@router.get("/variants", response_model=ListIdsResponse)
-async def variants() -> ListIdsResponse:
-    return ListIdsResponse(ids=list_variant_ids(_settings()))
+@router.get("/variants", response_model=ListVariantsResponse)
+def variants(
+    brand_id: str = Query(..., description="Brand UUID or slug"),
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ListVariantsResponse:
+    brand = get_tenant_brand(db, auth.tenant_id, brand_id)
+    if brand is None:
+        raise HTTPException(status_code=404, detail=f"Brand '{brand_id}' not found")
+    rows = list_brand_variants(db, brand)
+    if not rows:
+        rows = seed_brand_variants_from_disk(db, brand, settings)
+    return ListVariantsResponse(
+        variants=[VariantOut(**variant_to_dict(r)) for r in rows]
+    )
 
 
 @router.post("/variants/propose", response_model=ProposeVariantsResponse)
-async def variants_propose(body: ProposeVariantsRequest) -> ProposeVariantsResponse:
-    settings = _settings()
+async def variants_propose(
+    body: ProposeVariantsRequest,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ProposeVariantsResponse:
     if not has_llm_credentials(settings):
         raise HTTPException(
             status_code=500,
             detail="Set ANTHROPIC_API_KEY or OPENAI_API_KEY",
         )
+    brand = get_tenant_brand(db, auth.tenant_id, body.brand_id)
+    if brand is None:
+        raise HTTPException(status_code=404, detail=f"Brand '{body.brand_id}' not found")
     try:
         variants, saved_ids = await propose_and_save_variants(
+            db=db,
+            brand=brand,
             template_id=body.template_id,
             pack_id=body.pack_id,
-            brand_id=body.brand_id,
             count=body.count,
             settings=settings,
         )
@@ -95,13 +127,27 @@ async def variants_propose(body: ProposeVariantsRequest) -> ProposeVariantsRespo
 
 
 @router.post("/packs/propose", response_model=ProposePacksResponse)
-async def packs_propose(body: ProposePacksRequest) -> ProposePacksResponse:
+async def packs_propose(
+    body: ProposePacksRequest,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ProposePacksResponse:
     """Propose multi-page packs from the existing page catalog; optionally pair with variants."""
-    settings = _settings()
     if not has_llm_credentials(settings):
         raise HTTPException(
             status_code=500,
             detail="Set ANTHROPIC_API_KEY or OPENAI_API_KEY",
+        )
+    brand = None
+    if body.brand_id:
+        brand = get_tenant_brand(db, auth.tenant_id, body.brand_id)
+        if brand is None:
+            raise HTTPException(status_code=404, detail=f"Brand '{body.brand_id}' not found")
+    elif body.with_variants:
+        raise HTTPException(
+            status_code=400,
+            detail="brand_id is required when with_variants is true",
         )
     try:
         packs, saved_pack_ids, variants, saved_variant_ids = await propose_and_save_packs(
@@ -109,7 +155,8 @@ async def packs_propose(body: ProposePacksRequest) -> ProposePacksResponse:
             format_name=body.format,
             settings=settings,
             brief=body.brief,
-            brand_id=body.brand_id,
+            brand=brand,
+            db=db,
             with_variants=body.with_variants,
             variant_count=body.variant_count,
         )

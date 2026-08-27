@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth.deps import AuthContext, get_current_auth
 from app.brands import service as brand_service
 from app.config import SocialFormat
+from app.config import Settings, get_settings
 from app.db.session import get_db
 
 router = APIRouter(prefix="/brands", tags=["brands"])
@@ -85,6 +86,7 @@ def create_brand(
     body: CreateBrandBody,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> BrandOut:
     try:
         brand = brand_service.create_brand(
@@ -97,6 +99,7 @@ def create_brand(
             website=body.website,
             logo=body.logo,
             formats=list(body.formats),
+            settings=settings,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -13,17 +13,35 @@ from sqlalchemy.orm import Session
 
 from app.brands.service import brand_formats, brand_to_profile, get_tenant_brand
 from app.brands.store import BrandProfile, resolve_logo_path
+from app.brands.variants import get_brand_variant
 from app.config import Settings, SocialFormat, has_llm_credentials
-from app.db.models import Feedback, Post, PostRevision
+from app.db.models import Brand, Feedback, Post, PostRevision
 from app.generate.posts import generate_carousel, generate_post
 from app.images.recraft import generate_recraft_image
 from app.render.screenshot import screenshot_html
 from app.render.video import render_html_video
 from app.scrape.page import scrape_page
 from app.storage import get_storage
-from app.templates.engine import load_variant, path_to_file_url, render_filled_html
+from app.templates.engine import path_to_file_url, render_filled_html
 from app.templates.packs import load_pack, render_pack_page_html
 from app.templates.variants import propose_and_save_variants
+
+
+def _load_post_variant_css(db: Session, post: Post) -> dict[str, Any] | None:
+    if not post.variant_id:
+        return None
+    brand = db.get(Brand, post.brand_id) if post.brand_id else None
+    row = get_brand_variant(
+        db,
+        tenant_id=post.tenant_id,
+        brand=brand,
+        variant_id=post.variant_id,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail=f"Variant '{post.variant_id}' not found"
+        )
+    return dict(row.css_vars or {})
 
 
 def _resolve_format(
@@ -318,10 +336,22 @@ async def create_draft_post(
         pack_id = None
 
     if variant_id:
-        try:
-            load_variant(variant_id, settings)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if brand_row is None:
+            raise HTTPException(
+                status_code=400,
+                detail="brand_id is required when setting variant_id",
+            )
+        row = get_brand_variant(
+            db,
+            tenant_id=tenant_id,
+            brand=brand_row,
+            variant_id=variant_id,
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail=f"Variant '{variant_id}' not found"
+            )
+        variant_id = str(row.id)
 
     post = Post(
         tenant_id=tenant_id,
@@ -477,13 +507,7 @@ async def compose_post(
     pages_dir = run_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
     fmt: SocialFormat = post.format  # type: ignore[assignment]
-    variant_css = None
-    if post.variant_id:
-        try:
-            variant = load_variant(post.variant_id, settings)
-            variant_css = variant.get("css_vars") or {}
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    variant_css = _load_post_variant_css(db, post)
 
     brand_name = content.get("brand") or ""
     tagline = content.get("tagline") or ""
@@ -722,8 +746,6 @@ async def resize_post(
     settings: Settings,
 ) -> Post:
     if post.brand_id:
-        from app.db.models import Brand
-
         brand_row = db.get(Brand, post.brand_id)
         if brand_row is not None:
             # Validate against brand.formats (raises 400 if not allowed)
@@ -764,7 +786,13 @@ async def redesign_post(
     recompose: bool,
     settings: Settings,
 ) -> Post:
+    brand = db.get(Brand, post.brand_id) if post.brand_id else None
     if propose and not variant_id:
+        if brand is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Post needs a brand_id to propose variants",
+            )
         if not has_llm_credentials(settings):
             raise HTTPException(
                 status_code=500,
@@ -772,9 +800,10 @@ async def redesign_post(
             )
         try:
             _variants, saved_ids = await propose_and_save_variants(
+                db=db,
+                brand=brand,
                 template_id=(post.template_id or "default") if not post.pack_id else None,
                 pack_id=post.pack_id,
-                brand_id=None,
                 count=1,
                 settings=settings,
             )
@@ -790,11 +819,17 @@ async def redesign_post(
         variant_id = saved_ids[0]
 
     if variant_id:
-        try:
-            load_variant(variant_id, settings)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        post.variant_id = variant_id
+        row = get_brand_variant(
+            db,
+            tenant_id=post.tenant_id,
+            brand=brand,
+            variant_id=variant_id,
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail=f"Variant '{variant_id}' not found"
+            )
+        post.variant_id = str(row.id)
 
     if regenerate_images:
         post = await generate_post_images(

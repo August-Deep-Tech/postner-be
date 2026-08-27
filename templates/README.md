@@ -1,16 +1,19 @@
 # Template contract
 
 Packs are **multi-page templates** (ordered HTML pages + shared `css_vars`).
-Single-page files in this folder are one-page templates. **Variants** are shared
-color skins (`variants/*.json`) that apply to either a single template or every
-page in a pack.
+Single-page files in this folder are one-page templates. **Variants** are
+**per-brand** color skins stored in Postgres (`brand_variants`). Starter JSON
+under repo `variants/*.json` is copied onto a brand when it is created.
 
 Propose them hand in hand:
 
 | Route | Purpose |
 |---|---|
-| `POST /variants/propose` | Color palettes for `template_id` **or** `pack_id` |
-| `POST /packs/propose` | New packs assembled from existing page HTML; optional paired variants |
+| `GET /variants?brand_id=` | List that brand’s palettes |
+| `POST /variants/propose` | Requires `brand_id`; color palettes for `template_id` **or** `pack_id` |
+| `POST /packs/propose` | New packs from page HTML; `with_variants` needs `brand_id` and saves skins on the brand |
+
+Variant LLM inputs: design HTML + required `--*` CSS keys + brand name/tagline/description.
 
 ---
 
@@ -122,30 +125,30 @@ POST /packs/propose
 ```
 
 Builds new packs by **cloning existing page templates** from the catalog (does not invent HTML).
-When `with_variants` is true, also runs variant propose against the first new pack.
+When `with_variants` is true, `brand_id` is required and variants are saved on that brand.
 
 ```http
 POST /variants/propose
-{ "pack_id": "lifestyle_tips", "count": 3 }
+{ "brand_id": "<brand-uuid-or-slug>", "pack_id": "lifestyle_tips", "count": 3 }
 ```
 
 or
 
 ```http
 POST /variants/propose
-{ "template_id": "basic", "count": 3 }
+{ "brand_id": "<brand-uuid-or-slug>", "template_id": "basic", "count": 3 }
 ```
 
-Provide exactly one of `pack_id` / `template_id`. Optional `brand_id` biases palettes.
+Provide exactly one of `pack_id` / `template_id`. Brand voice biases the palette; rows are stored per brand.
 
 ### Generate / posts with a pack
 
 ```http
 POST /posts
-{ "url": "https://example.com/blog/post", "pack_id": "gentle_reminders", "brand_id": "gradde" }
+{ "url": "https://example.com/blog/post", "pack_id": "gentle_reminders", "brand_id": "<brand-id>", "variant_id": "<variant-uuid>" }
 ```
 
 - Skips Recraft when all pages have `images: 0`
 - `GET /packs` lists available packs (including proposed ones)
-- Optional: `"variant_id": "calm_ocean"`, `"format": "ig_portrait"`
-- Redesign with `"propose": true` auto-proposes one variant for the post's pack/template
+- `GET /variants?brand_id=` lists that brand’s palettes; pass `variant_id` (UUID or slug)
+- Redesign with `"propose": true` auto-proposes one variant onto the post’s brand

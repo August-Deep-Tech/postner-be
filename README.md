@@ -5,9 +5,9 @@ Multi-tenant FastAPI backend: register → brands → draft post → Recraft ima
 ## Stack
 
 - **Auth:** email/password + JWT
-- **DB:** Postgres (Docker)
-- **Assets:** Docker volume `/app/output`
-- **Packs/templates/variants:** on disk (shared catalog)
+- **DB:** Postgres (Docker) — tenants, brands, **brand variants**, posts, revisions
+- **Assets:** Docker volume `/app/output`; composed PNG/MP4 → object storage when `STORAGE_BACKEND=s3`
+- **Packs/templates:** on disk (shared catalog). Starter variant JSON under `variants/` is **seeded into each brand** on create.
 
 ## Quick start (Docker)
 
@@ -80,16 +80,29 @@ JWT claims: `sub` (user_id), `tenant_id`. Set `Authorization: Bearer <token>` on
 
 ### Packs + variants (design propose)
 
-Packs are multi-page templates; variants are shared CSS color skins for a template **or** pack.
+Packs are multi-page templates on disk. **Variants are per-brand color palettes in Postgres** (`brand_variants`). Creating a brand seeds starter palettes from `variants/*.json`.
 
 | Method | Path | Role |
 |---|---|---|
 | GET | `/packs` | List packs |
-| POST | `/packs/propose` | Assemble new packs from page catalog; `with_variants` pairs color skins |
-| GET | `/variants` | List variant ids |
-| POST | `/variants/propose` | Palettes for `pack_id` **or** `template_id` (XOR); optional `brand_id` |
+| POST | `/packs/propose` | Assemble new packs; `with_variants` requires `brand_id` and saves skins on that brand |
+| GET | `/variants?brand_id=` | List that brand’s variants (`id`, `slug`, `label`, `css_vars`) |
+| POST | `/variants/propose` | **Requires `brand_id`**; palettes for `pack_id` **or** `template_id` (XOR), saved on the brand |
+
+Variant generation is biased by: pack/template HTML + required CSS keys + brand name/tagline/description.
 
 See [`templates/README.md`](templates/README.md).
+
+### Still on local disk
+
+| Path | What |
+|---|---|
+| `templates/` | HTML templates + packs (shared catalog; proposed packs also write here) |
+| `variants/` | Starter JSON only (seed source for new brands) |
+| `brands/<slug>/` | Optional logo files referenced by DB brands |
+| `output/<run>/` | Recraft images, filled HTML, local PNG/MP4 workspace (`Post.asset_dir`) |
+
+Composed finals upload via `ObjectStorage` when `STORAGE_BACKEND=s3`; otherwise URLs stay local paths.
 
 ## Env
 

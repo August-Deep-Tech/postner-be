@@ -116,6 +116,7 @@ def create_brand(
     website: str | None = None,
     logo: str | None = None,
     formats: list[str] | str | None = None,
+    settings: Settings | None = None,
 ) -> Brand:
     bid = normalize_brand_id(slug or name)
     existing = db.scalar(
@@ -136,6 +137,10 @@ def create_brand(
     db.add(brand)
     db.commit()
     db.refresh(brand)
+    if settings is not None:
+        from app.brands.variants import seed_brand_variants_from_disk
+
+        seed_brand_variants_from_disk(db, brand, settings)
     return brand
 
 

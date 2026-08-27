@@ -94,7 +94,7 @@ GET /templates
 
 First-post recommendation: a pack (carousel) e.g. `lifestyle_tips` or `gentle_reminders`, **or** single template `basic` / `lifestyle_day`. Exactly one of `pack_id` | `template_id`.
 
-Optional colors: `GET /variants` or `POST /variants/propose` / `POST /packs/propose` (advanced; not required for first download).
+Optional colors: `GET /variants?brand_id=<id>` (per-brand DB palettes) or `POST /variants/propose` with `brand_id` / `POST /packs/propose` (advanced; not required for first download).
 
 ### Step 4 — Draft (cheap)
 
@@ -270,7 +270,9 @@ After compose (and recompose paths: resize / redesign / rewrite / animate), each
 | Login | POST | `/auth/login` |
 | Me | GET | `/auth/me` |
 | Brands | GET/POST/PATCH | `/brands`, `/brands/{id}` |
-| Packs / templates / variants | GET | `/packs`, `/templates`, `/variants` |
+| Packs / templates | GET | `/packs`, `/templates` |
+| Brand variants | GET | `/variants?brand_id=` |
+| Propose variants | POST | `/variants/propose` (`brand_id` required) |
 | Draft | POST | `/posts` |
 | Photos | POST | `/posts/{id}/images` |
 | Final PNG | POST | `/posts/{id}/compose` |

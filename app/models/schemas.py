@@ -8,9 +8,9 @@ from app.config import SocialFormat
 
 
 class ProposeVariantsRequest(BaseModel):
+    brand_id: str
     template_id: str | None = None
     pack_id: str | None = None
-    brand_id: str | None = None
     count: int = Field(default=3, ge=1, le=8)
 
     @model_validator(mode="after")
@@ -29,6 +29,12 @@ class ProposePacksRequest(BaseModel):
     with_variants: bool = True
     variant_count: int = Field(default=3, ge=1, le=8)
     brief: str = ""
+
+    @model_validator(mode="after")
+    def _variants_need_brand(self) -> ProposePacksRequest:
+        if self.with_variants and not self.brand_id:
+            raise ValueError("brand_id is required when with_variants is true")
+        return self
 
 
 class ProposePacksResponse(BaseModel):
@@ -93,6 +99,18 @@ class GeneratedCarousel(BaseModel):
 class ProposeVariantsResponse(BaseModel):
     variants: list[dict[str, Any]]
     saved_ids: list[str]
+
+
+class VariantOut(BaseModel):
+    id: str
+    slug: str
+    label: str
+    css_vars: dict[str, Any]
+    brand_id: str
+
+
+class ListVariantsResponse(BaseModel):
+    variants: list[VariantOut]
 
 
 class HealthResponse(BaseModel):

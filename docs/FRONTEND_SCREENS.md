@@ -80,7 +80,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `post_pack` | Pack | Select cards | choice | `pack_id` | From `GET /packs`; XOR with template |
 | `post_template` | Template | Select | choice | `template_id` | From `GET /templates`; default `basic` if neither |
 | `post_format` | Format | Select chips | choice | `format` | Must be one of **brand.formats**. Default: first brand format. Options = brand’s enabled list only |
-| `post_variant` | Color variant | Select (optional) | choice | `variant_id` | From `GET /variants`; nullable |
+| `post_variant` | Color variant | Select (optional) | choice | `variant_id` | From `GET /variants?brand_id=`; nullable |
 | `post_with_images` | Generate photos now | Toggle | boolean | `with_images` | Default **false** (cheaper draft). Still need compose for PNG |
 | `post_submit` | Generate | Button (primary) | button | `POST /posts` | Then Generating screen |
 
@@ -100,7 +100,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | Control | Route | Next |
 |---|---|---|
 | Generate | `POST /posts` | Generating (pass `post_id`) |
-| Prefetch catalogs | `GET /packs`, `GET /templates`, `GET /variants` | On screen mount |
+| Prefetch catalogs | `GET /packs`, `GET /templates`, `GET /variants?brand_id=` | On screen mount (variants need brand) |
 
 **Note:** `with_images: true` is **not** compose. Compose still required for the final PNG.
 
@@ -211,7 +211,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 
 | ID | Label / content | Component | Type | API binding | Validation / notes |
 |---|---|---|---|---|---|
-| `edit_variant` | Color variant | Select | choice | `variant_id` | From `GET /variants` |
+| `edit_variant` | Color variant | Select | choice | `variant_id` | From `GET /variants?brand_id=` (post’s brand) |
 | `edit_propose` | Propose new palette | Toggle / button | boolean | `propose: true` | Auto-proposes if no variant_id |
 | `edit_regen_images` | New photos | Toggle | boolean | `regenerate_images` | Default false |
 | `edit_look_recompose` | Update preview | Toggle | boolean | `recompose` | Default true |
