@@ -145,13 +145,6 @@ POST /posts
 { "url": "https://example.com/blog/post", "pack_id": "gentle_reminders", "brand_id": "gradde" }
 ```
 
-Legacy one-shot:
-
-```http
-POST /generate
-{ "url": "https://example.com/blog/post", "pack_id": "gentle_reminders", "brand_id": "gradde" }
-```
-
 - Skips Recraft when all pages have `images: 0`
 - `GET /packs` lists available packs (including proposed ones)
 - Optional: `"variant_id": "calm_ocean"`, `"format": "ig_portrait"`

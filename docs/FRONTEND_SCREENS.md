@@ -53,6 +53,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `brand_description` | About | Textarea | text | `description` | Optional; voice for LLM |
 | `brand_website` | Website | Text input | text (url) | `website` | Optional URL |
 | `brand_logo` | Logo | File upload / URL input | image | `logo` | Optional URL or storage key for now |
+| `brand_formats` | Enabled post formats | Multi-select chips | choice[] | `formats` | One or more of `ig_feed` \| `ig_portrait` \| `ig_story` \| `tiktok` \| `fb_post` \| `x_post`. Order matters: **first = default**. Default `["ig_feed"]` |
 | `brand_slug` | ID (slug) | Text input | text | create `id` (optional) | Optional; auto from name if omitted |
 | `brand_save` | Save brand | Button (primary) | button | `POST /brands` or `PATCH /brands/{id}` | Use returned `id` or `slug` as `brand_id` later |
 | `brand_empty_cta` | Create your brand | Empty-state CTA | button | Opens create form | Required before New post |
@@ -78,7 +79,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `post_mode` | Pack vs single template | Segmented control | choice | UI-only → sets XOR | Exactly one of pack / template |
 | `post_pack` | Pack | Select cards | choice | `pack_id` | From `GET /packs`; XOR with template |
 | `post_template` | Template | Select | choice | `template_id` | From `GET /templates`; default `basic` if neither |
-| `post_format` | Format | Select chips | choice | `format` | See format table; pack may default format |
+| `post_format` | Format | Select chips | choice | `format` | Must be one of **brand.formats**. Default: first brand format. Options = brand’s enabled list only |
 | `post_variant` | Color variant | Select (optional) | choice | `variant_id` | From `GET /variants`; nullable |
 | `post_with_images` | Generate photos now | Toggle | boolean | `with_images` | Default **false** (cheaper draft). Still need compose for PNG |
 | `post_submit` | Generate | Button (primary) | button | `POST /posts` | Then Generating screen |
@@ -144,7 +145,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `rev_verified` | Verified mark | Icon | icon | — | Decorative / brand badge |
 | `rev_handle` | @handle | Text | text | Derive from brand slug/name | Secondary |
 | `rev_body` | Post body / overlay | Text block | text | `content.ig_fb_caption` or slide fields / composed preview | For packs: show current slide |
-| `rev_preview` | Composed PNG | Image | image | `composed` / page PNG paths | Primary visual; carousel pager if pack |
+| `rev_preview` | Composed PNG | Image | image | `composed.pages[].url` (fallback `path`) | Primary visual; carousel pager if pack |
 | `rev_slide_pager` | Slide dots / swipe | Pager | navigation | `content.slides[]` / composed pages | Packs only |
 | `rev_meta_icons` | Comment / repost / like / stats | Icon row | icon | — | Decorative chrome (X-style) |
 | `rev_schedule_line` | Schedule for … | Text | text | — | Placeholder v1; scheduling later |
@@ -215,6 +216,8 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `edit_regen_images` | New photos | Toggle | boolean | `regenerate_images` | Default false |
 | `edit_look_recompose` | Update preview | Toggle | boolean | `recompose` | Default true |
 | `edit_look_save` | Apply look | Button (primary) | button | `POST /posts/{id}/redesign` | |
+| `edit_undo` | Undo last change | Button (ghost) | button | `POST /posts/{id}/undo` | Restores previous snapshot |
+| `edit_history` | Version history | Optional list | status | `GET /posts/{id}/revisions` | `{ id, kind, version, created_at }` |
 
 ### Actions
 
@@ -222,6 +225,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 |---|---|
 | Apply copy | `POST /posts/{id}/rewrite` |
 | Apply look | `POST /posts/{id}/redesign` |
+| Undo | `POST /posts/{id}/undo` |
 | Optional log | `POST /posts/{id}/feedback` `{ "decision": "needs_changes" }` |
 | Close | Return to Review with refreshed `GET /posts/{id}` |
 
@@ -236,10 +240,10 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 |---|---|---|---|---|---|
 | `dl_title` | Download | Heading | text | — | Shown after approve |
 | `dl_preview` | Preview | Image | image | Current composed PNG(s) | |
-| `dl_format` | Size / platform | Chip group / select | choice | `POST .../resize` → `format` | See format table (screen 3) |
+| `dl_format` | Size / platform | Chip group / select | choice | `POST .../resize` → `format` | Options = **brand.formats** only (see format table) |
 | `dl_apply_format` | Apply size | Button (secondary) | button | `resize` `{ "apply_to_post": true }` | Only if format ≠ current |
 | `dl_pages` | Which slides | Multi-select | choice[] | `resize.pages` / compose pages | Packs; default all |
-| `dl_download` | Download | Button (primary) | button | Fetch asset file(s) | See asset gap |
+| `dl_download` | Download | Button (primary) | button | `composed.pages[].url` | Prefer public/storage URL |
 | `dl_animate` | Also make video | Optional toggle + button | boolean | `POST .../animate` | Optional; not required for v1 |
 | `dl_done` | Done | Button (ghost) | button | — | Exit to list / home |
 
@@ -249,7 +253,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 |---|---|---|
 | Approve (from Review) | `POST /posts/{id}/feedback` `{ "decision": "approved" }` | Opens this sheet |
 | Apply size | `POST /posts/{id}/resize` | `{ "format": "x_post", "apply_to_post": true }` |
-| Download | Asset fetch | **Gap:** no public file URL yet — see onboarding doc; need `GET` asset route or local proxy |
+| Download | `composed.pages[].url` | Public when `STORAGE_BACKEND=s3`; local path when `local` |
 | Optional MP4 | `POST /posts/{id}/animate` | `{ "motion_preset": "fade_kenburns" }` |
 
 ---

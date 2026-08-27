@@ -60,7 +60,15 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="dev-secret-change-me", alias="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=60 * 24 * 7, alias="JWT_EXPIRE_MINUTES")
-    auth_disabled: bool = Field(default=False, alias="AUTH_DISABLED")
+
+    # Object storage (S3-compatible: R2, AWS S3, MinIO, …). Default local = no upload.
+    storage_backend: str = Field(default="local", alias="STORAGE_BACKEND")
+    storage_bucket: str = Field(default="", alias="STORAGE_BUCKET")
+    storage_access_key_id: str = Field(default="", alias="STORAGE_ACCESS_KEY_ID")
+    storage_secret_access_key: str = Field(default="", alias="STORAGE_SECRET_ACCESS_KEY")
+    storage_endpoint_url: str = Field(default="", alias="STORAGE_ENDPOINT_URL")
+    storage_region: str = Field(default="auto", alias="STORAGE_REGION")
+    storage_public_base_url: str = Field(default="", alias="STORAGE_PUBLIC_BASE_URL")
 
     templates_dir: Path = REPO_ROOT / "templates"
     variants_dir: Path = REPO_ROOT / "variants"

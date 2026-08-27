@@ -2,31 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.config import SocialFormat
-
-
-class GenerateRequest(BaseModel):
-    url: HttpUrl
-    template_id: str | None = None
-    pack_id: str | None = None
-    variant_id: str | None = None
-    brand_id: str | None = None
-    format: SocialFormat | None = None
-    brand: str | None = None
-    animate: bool = False
-    motion_preset: str = "fade_kenburns"
-
-    @model_validator(mode="after")
-    def _require_template_or_pack(self) -> GenerateRequest:
-        if self.pack_id and self.template_id:
-            raise ValueError("Provide only one of template_id or pack_id")
-        if not self.pack_id and not self.template_id:
-            self.template_id = "default"
-        if self.template_id and self.format is None:
-            self.format = "ig_feed"
-        return self
 
 
 class ProposeVariantsRequest(BaseModel):
@@ -110,28 +88,6 @@ class GeneratedCarousel(BaseModel):
     tiktok_script: str = ""
     visual_prompt: str = ""
     slides: list[CarouselSlide]
-
-
-class GenerateResponse(BaseModel):
-    run_id: str
-    post_type: str
-    ig_fb_caption: str
-    tiktok_script: str
-    visual_prompt: str
-    overlay_text: str
-    page_type: str
-    cta_link: str
-    image_path: str | None
-    final_path: str | None
-    page_paths: list[str] = Field(default_factory=list)
-    video_path: str | None = None
-    page_video_paths: list[str] = Field(default_factory=list)
-    meta_path: str
-    template_id: str | None
-    pack_id: str | None = None
-    brand_id: str | None = None
-    variant_id: str | None
-    format: SocialFormat
 
 
 class ProposeVariantsResponse(BaseModel):

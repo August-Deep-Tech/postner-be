@@ -30,7 +30,7 @@ Primary review chrome for **mobile and desktop** — same three actions, respons
 
 ## End-to-end flow (first post)
 
-Use the **full split pipeline** (not legacy `POST /generate`).
+Use the **full split pipeline**.
 
 ```mermaid
 flowchart TD
@@ -78,11 +78,12 @@ POST /brands
   "tagline": "...",
   "description": "...",
   "website": "https://example.com",
-  "logo": null
+  "logo": null,
+  "formats": ["x_post", "ig_portrait", "ig_feed"]
 }
 ```
 
-Use returned `id` (UUID) or `slug` as `brand_id` on posts. Do not proceed to New post until at least one brand exists.
+Use returned `id` (UUID) or `slug` as `brand_id` on posts. `formats` is the brand’s enabled canvases (ordered; **first is default**). New posts / resize must pick from this list. Do not proceed to New post until at least one brand exists.
 
 ### Step 3 — Pick a pack or template
 
@@ -133,7 +134,9 @@ POST /posts/{post_id}/compose
 ```
 
 - `ensure_images: true` fills missing photos once, then Playwright PNGs.
-- Response `composed` / `meta` includes page paths (see **Download gap** below).
+- Response `composed.pages[].url` (and `composed.page_paths`) are the URLs to preview/download.
+  - With `STORAGE_BACKEND=s3`, these are public CDN/bucket URLs.
+  - With `STORAGE_BACKEND=local` (default smoke), they stay as local filesystem paths.
 - Poll or await; then open **Review UI** with composed preview.
 
 ### Step 7 — Review UI (screenshot)
@@ -165,6 +168,8 @@ Open edit panel:
 | Change copy | `POST /posts/{id}/rewrite` `{ "text"?, "caption"?, "suggest"?, "recompose": true }` |
 | New colors | `POST /posts/{id}/redesign` `{ "variant_id"? , "propose": true, "recompose": true }` |
 | New size only | Prefer download resize (below), or `POST .../resize` |
+| Undo last edit | `POST /posts/{id}/undo` — restores previous full snapshot (content + composed) |
+| History | `GET /posts/{id}/revisions` — `{ id, kind, version, created_at }[]` |
 
 `needs_changes` feedback is available if you want to log “edited” without reject:
 
@@ -208,7 +213,7 @@ POST /posts/{post_id}/resize
 }
 ```
 
-3. Download the PNG(s) from the post’s composed assets (see gap below). For packs, zip or multi-file download of each page.
+3. Download the PNG(s) from `composed.pages[].url` (or `composed.page_paths`). For packs, zip or multi-file download of each page.
 
 Optional polish (not required for first download): `POST /posts/{id}/animate` for MP4.
 
@@ -233,21 +238,27 @@ Content-Type: application/json
 | Generating | Progress for draft → images → compose |
 | **Review** | Screenshot UI — Step 7 |
 | Reject sheet | Reasons + note |
-| Edit sheet | Rewrite / redesign |
+| Edit sheet | Rewrite / redesign / undo |
 | Download sheet | Format/resize + download CTA |
 
 ---
 
-## Known backend gap (download URLs)
+## Composed asset URLs
 
-Compose returns **filesystem paths** under `asset_dir` / `composed` (e.g. `output/<run>/pages/01_cover.png`). There is **not yet** a public `GET /posts/{id}/assets/...` route.
+After compose (and recompose paths: resize / redesign / rewrite / animate), each page includes:
 
-**Temporary FE options until BE adds asset serving:**
+```json
+{
+  "page_id": "cover",
+  "path": "/app/output/.../01_cover.png",
+  "url": "https://cdn.example.com/tenants/.../v3/pages/01_cover.png",
+  "key": "tenants/.../v3/pages/01_cover.png"
+}
+```
 
-- Local/dev proxy that reads from the Docker `output` volume, or
-- Ask BE for `GET /posts/{post_id}/files/{path}` (auth-scoped) — preferred follow-up.
-
-Until then, document downloads against local paths only in docker-connected environments, or block on that endpoint.
+- FE should prefer **`url`** for `<img src>` and download.
+- Storage is env-swappable (`STORAGE_BACKEND=local|s3`); S3-compatible backends (Cloudflare R2, AWS S3, MinIO) share the same code path.
+- Recraft intermediates are **not** uploaded — only final compose PNG/MP4.
 
 ---
 
@@ -269,8 +280,8 @@ Until then, document downloads against local paths only in docker-connected envi
 | Edit look | POST | `/posts/{id}/redesign` |
 | Resize | POST | `/posts/{id}/resize` |
 | Animate | POST | `/posts/{id}/animate` |
-
-Do **not** use `POST /generate` for the product first-run (legacy one-shot / local smoke only).
+| Undo | POST | `/posts/{id}/undo` |
+| Revisions | GET | `/posts/{id}/revisions` |
 
 ---
 

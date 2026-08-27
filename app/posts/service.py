@@ -8,10 +8,10 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.brands.service import brand_to_profile, get_tenant_brand
+from app.brands.service import brand_formats, brand_to_profile, get_tenant_brand
 from app.brands.store import BrandProfile, resolve_logo_path
 from app.config import Settings, SocialFormat, has_llm_credentials
 from app.db.models import Feedback, Post, PostRevision
@@ -20,9 +20,35 @@ from app.images.recraft import generate_recraft_image
 from app.render.screenshot import screenshot_html
 from app.render.video import render_html_video
 from app.scrape.page import scrape_page
+from app.storage import get_storage
 from app.templates.engine import load_variant, path_to_file_url, render_filled_html
 from app.templates.packs import load_pack, render_pack_page_html
 from app.templates.variants import propose_and_save_variants
+
+
+def _resolve_format(
+    *,
+    format_name: SocialFormat | None,
+    brand_row,
+    pack_fallback: SocialFormat | None = None,
+) -> SocialFormat:
+    """Request format (must be in brand.formats) > first brand format > pack > ig_feed."""
+    allowed = brand_formats(brand_row) if brand_row is not None else []
+    if format_name:
+        if allowed and format_name not in allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Format '{format_name}' is not enabled for this brand. "
+                    f"Allowed: {', '.join(allowed)}"
+                ),
+            )
+        return format_name
+    if allowed:
+        return allowed[0]  # type: ignore[return-value]
+    if pack_fallback:
+        return pack_fallback
+    return "ig_feed"
 
 
 def _new_run_dir(settings: Settings) -> tuple[str, Path]:
@@ -44,20 +70,125 @@ def _brand_fields(
     return profile.name, profile.tagline, profile.description, logo_url
 
 
+def _next_revision_version(db: Session, post_id: UUID) -> int:
+    current = db.scalar(
+        select(func.max(PostRevision.version)).where(PostRevision.post_id == post_id)
+    )
+    return int(current or 0) + 1
+
+
+def _post_snapshot(post: Post) -> dict[str, Any]:
+    return {
+        "status": post.status,
+        "format": post.format,
+        "pack_id": post.pack_id,
+        "template_id": post.template_id,
+        "variant_id": post.variant_id,
+        "content": dict(post.content or {}),
+        "images": dict(post.images or {}),
+        "composed": dict(post.composed or {}),
+        "meta": dict(post.meta or {}),
+    }
+
+
 def _add_revision(
     db: Session,
     post: Post,
     kind: str,
-    payload: dict[str, Any],
-) -> None:
-    db.add(
-        PostRevision(
-            post_id=post.id,
-            tenant_id=post.tenant_id,
-            kind=kind,
-            payload=payload,
-        )
+    extra: dict[str, Any] | None = None,
+) -> PostRevision:
+    version = _next_revision_version(db, post.id)
+    payload = _post_snapshot(post)
+    payload["version"] = version
+    if extra:
+        payload["extra"] = extra
+    row = PostRevision(
+        post_id=post.id,
+        tenant_id=post.tenant_id,
+        kind=kind,
+        version=version,
+        payload=payload,
     )
+    db.add(row)
+    return row
+
+
+def _object_key(post: Post, version: int, relative: str) -> str:
+    rel = relative.lstrip("/").replace("\\", "/")
+    return f"tenants/{post.tenant_id}/posts/{post.id}/v{version}/{rel}"
+
+
+def _upload_composed_assets(
+    db: Session,
+    post: Post,
+    settings: Settings,
+) -> dict[str, Any]:
+    """Upload composed PNG/MP4 via ObjectStorage; attach url/key on composed payload."""
+    storage = get_storage(settings)
+    ver = _next_revision_version(db, post.id)
+    is_pack = (post.content or {}).get("mode") == "pack"
+    composed = dict(post.composed or {})
+
+    pages_out: list[dict[str, Any]] = []
+    for entry in list(composed.get("pages") or []):
+        item = dict(entry)
+        local = item.get("path")
+        if local and Path(local).is_file():
+            name = Path(local).name
+            relative = f"pages/{name}" if is_pack else name
+            key = _object_key(post, ver, relative)
+            try:
+                url = storage.upload(Path(local), key)
+            except Exception as exc:  # noqa: BLE001
+                raise HTTPException(
+                    status_code=502, detail=f"Asset upload failed: {exc}"
+                ) from exc
+            item["key"] = key
+            item["url"] = url
+        pages_out.append(item)
+
+    composed["pages"] = pages_out
+    composed["page_paths"] = [p.get("url") or p.get("path") for p in pages_out]
+    composed["final_path"] = (
+        (pages_out[0].get("url") or pages_out[0].get("path")) if pages_out else None
+    )
+
+    videos_in = dict(composed.get("videos") or {})
+    videos_out: dict[str, str] = {}
+    video_urls: dict[str, str] = dict(composed.get("video_urls") or {})
+    video_keys: dict[str, str] = dict(composed.get("video_keys") or {})
+    for pid, local in videos_in.items():
+        if not local or not Path(local).is_file():
+            if local:
+                videos_out[pid] = local
+            continue
+        name = Path(local).name
+        relative = f"pages/{name}" if is_pack else name
+        key = _object_key(post, ver, relative)
+        try:
+            url = storage.upload(Path(local), key)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502, detail=f"Video upload failed: {exc}"
+            ) from exc
+        videos_out[pid] = local
+        video_urls[pid] = url
+        video_keys[pid] = key
+
+    if videos_out or video_urls:
+        composed["videos"] = videos_out or videos_in
+        composed["video_urls"] = video_urls
+        composed["video_keys"] = video_keys
+        first_url = next(iter(video_urls.values()), None)
+        composed["video_path"] = first_url or next(
+            iter((videos_out or videos_in).values()), None
+        )
+        composed["page_video_paths"] = [
+            video_urls.get(pid) or path
+            for pid, path in (videos_out or videos_in).items()
+        ]
+
+    return composed
 
 
 def get_post_for_tenant(db: Session, tenant_id: UUID, post_id: UUID) -> Post:
@@ -111,7 +242,12 @@ async def create_draft_post(
             pack = load_pack(pack_id, settings)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        fmt = format_name or pack.format
+        # Explicit request > first brand format > pack default
+        fmt = _resolve_format(
+            format_name=format_name,
+            brand_row=brand_row,
+            pack_fallback=pack.format,
+        )
         try:
             carousel = await generate_carousel(
                 page,
@@ -147,7 +283,11 @@ async def create_draft_post(
         template_id = None
     else:
         tid = template_id or "default"
-        fmt = format_name or "ig_feed"
+        fmt = _resolve_format(
+            format_name=format_name,
+            brand_row=brand_row,
+            pack_fallback=None,
+        )
         try:
             post_data = await generate_post(
                 page,
@@ -200,7 +340,7 @@ async def create_draft_post(
     )
     db.add(post)
     db.flush()
-    _add_revision(db, post, "draft", {"content": content})
+    _add_revision(db, post, "draft")
     db.commit()
     db.refresh(post)
 
@@ -254,6 +394,7 @@ async def generate_post_images(
     pages: list[str] | None,
     regenerate: bool,
     settings: Settings,
+    record_revision: bool = True,
 ) -> Post:
     if not settings.fal_key:
         raise HTTPException(status_code=500, detail="FAL_KEY is not set")
@@ -297,12 +438,13 @@ async def generate_post_images(
     }
     if generated or regenerate:
         post.status = "imaged" if by_page else post.status
-        _add_revision(
-            db,
-            post,
-            "images",
-            {"generated": generated, "regenerate": regenerate, "images": post.images},
-        )
+        if record_revision:
+            _add_revision(
+                db,
+                post,
+                "images",
+                {"generated": generated, "regenerate": regenerate},
+            )
     db.commit()
     db.refresh(post)
     return post
@@ -315,14 +457,20 @@ async def compose_post(
     pages: list[str] | None,
     ensure_images: bool,
     settings: Settings,
+    record_revision: bool = True,
 ) -> Post:
     content = post.content or {}
     needed = int(content.get("pack_images_needed") or 0)
     has_images = bool((post.images or {}).get("by_page"))
     if needed > 0 and (not has_images or ensure_images):
-        # Gap-fill only: regenerate=False
+        # Gap-fill only: regenerate=False; do not snapshot mid-compose
         post = await generate_post_images(
-            db, post=post, pages=pages, regenerate=False, settings=settings
+            db,
+            post=post,
+            pages=pages,
+            regenerate=False,
+            settings=settings,
+            record_revision=False,
         )
 
     run_dir = Path(post.asset_dir)
@@ -353,7 +501,10 @@ async def compose_post(
             for index, page_def in enumerate(pack.sequenced_pages(), start=1):
                 if page_filter is not None and page_def.id not in page_filter:
                     if page_def.id in composed_by_id:
-                        page_paths.append(composed_by_id[page_def.id]["path"])
+                        page_paths.append(
+                            composed_by_id[page_def.id].get("url")
+                            or composed_by_id[page_def.id]["path"]
+                        )
                     continue
                 slide = slides_by_id.get(page_def.id, {})
                 fields = {
@@ -465,8 +616,10 @@ async def compose_post(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Compose failed: {exc}") from exc
 
+    post.composed = _upload_composed_assets(db, post, settings)
     post.status = "composed"
-    _add_revision(db, post, "compose", {"composed": post.composed})
+    if record_revision:
+        _add_revision(db, post, "compose")
     meta_path = run_dir / "meta.json"
     meta = {
         "post_id": str(post.id),
@@ -546,12 +699,13 @@ async def animate_post(
     if video_error:
         composed["video_error"] = video_error
     post.composed = composed
+    post.composed = _upload_composed_assets(db, post, settings)
     post.status = "animated" if videos and not video_error else post.status
     _add_revision(
         db,
         post,
         "animate",
-        {"videos": videos, "motion_preset": motion_preset, "video_error": video_error},
+        {"motion_preset": motion_preset, "video_error": video_error},
     )
     db.commit()
     db.refresh(post)
@@ -567,18 +721,28 @@ async def resize_post(
     apply_to_post: bool,
     settings: Settings,
 ) -> Post:
+    if post.brand_id:
+        from app.db.models import Brand
+
+        brand_row = db.get(Brand, post.brand_id)
+        if brand_row is not None:
+            # Validate against brand.formats (raises 400 if not allowed)
+            _resolve_format(format_name=format_name, brand_row=brand_row)
     if apply_to_post:
         post.format = format_name
     # Re-compose into current or keep format on post for render
     original = post.format
     post.format = format_name
     post = await compose_post(
-        db, post=post, pages=pages, ensure_images=True, settings=settings
+        db,
+        post=post,
+        pages=pages,
+        ensure_images=True,
+        settings=settings,
+        record_revision=False,
     )
     if not apply_to_post:
         post.format = original
-        db.commit()
-        db.refresh(post)
     _add_revision(
         db,
         post,
@@ -634,18 +798,27 @@ async def redesign_post(
 
     if regenerate_images:
         post = await generate_post_images(
-            db, post=post, pages=None, regenerate=True, settings=settings
+            db,
+            post=post,
+            pages=None,
+            regenerate=True,
+            settings=settings,
+            record_revision=False,
         )
     if recompose:
         post = await compose_post(
-            db, post=post, pages=None, ensure_images=True, settings=settings
+            db,
+            post=post,
+            pages=None,
+            ensure_images=True,
+            settings=settings,
+            record_revision=False,
         )
     _add_revision(
         db,
         post,
         "redesign",
         {
-            "variant_id": post.variant_id,
             "propose": propose,
             "regenerate_images": regenerate_images,
             "recompose": recompose,
@@ -714,11 +887,72 @@ async def rewrite_post(
     post.content = content
     if recompose:
         post = await compose_post(
-            db, post=post, pages=None, ensure_images=True, settings=settings
+            db,
+            post=post,
+            pages=None,
+            ensure_images=True,
+            settings=settings,
+            record_revision=False,
         )
     else:
         post.status = "drafted"
-    _add_revision(db, post, "rewrite", {"content": content, "suggest": suggest})
+    _add_revision(db, post, "rewrite", {"suggest": suggest})
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+def _apply_snapshot(post: Post, snapshot: dict[str, Any]) -> None:
+    if "status" in snapshot:
+        post.status = snapshot["status"]
+    if "format" in snapshot:
+        post.format = snapshot["format"]
+    if "pack_id" in snapshot:
+        post.pack_id = snapshot["pack_id"]
+    if "template_id" in snapshot:
+        post.template_id = snapshot["template_id"]
+    if "variant_id" in snapshot:
+        post.variant_id = snapshot["variant_id"]
+    if "content" in snapshot:
+        post.content = dict(snapshot["content"] or {})
+    if "images" in snapshot:
+        post.images = dict(snapshot["images"] or {})
+    if "composed" in snapshot:
+        post.composed = dict(snapshot["composed"] or {})
+    if "meta" in snapshot:
+        post.meta = dict(snapshot["meta"] or {})
+
+
+def list_revisions(db: Session, post: Post) -> list[PostRevision]:
+    return list(
+        db.scalars(
+            select(PostRevision)
+            .where(PostRevision.post_id == post.id)
+            .order_by(PostRevision.version.asc())
+        ).all()
+    )
+
+
+def undo_post(db: Session, post: Post) -> Post:
+    rows = list(
+        db.scalars(
+            select(PostRevision)
+            .where(PostRevision.post_id == post.id)
+            .order_by(PostRevision.version.desc())
+            .limit(2)
+        ).all()
+    )
+    if len(rows) < 2:
+        raise HTTPException(status_code=400, detail="Nothing to undo")
+    previous = rows[1]
+    snapshot = dict(previous.payload or {})
+    _apply_snapshot(post, snapshot)
+    _add_revision(
+        db,
+        post,
+        "undo",
+        {"restored_version": previous.version, "restored_kind": previous.kind},
+    )
     db.commit()
     db.refresh(post)
     return post

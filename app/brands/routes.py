@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.deps import AuthContext, get_current_auth
 from app.brands import service as brand_service
+from app.config import SocialFormat
 from app.db.session import get_db
 
 router = APIRouter(prefix="/brands", tags=["brands"])
@@ -18,6 +19,7 @@ class CreateBrandBody(BaseModel):
     description: str = ""
     website: str | None = None
     logo: str | None = None
+    formats: list[SocialFormat] = Field(default_factory=lambda: ["ig_feed"])
 
 
 class PatchBrandBody(BaseModel):
@@ -26,6 +28,7 @@ class PatchBrandBody(BaseModel):
     description: str | None = None
     website: str | None = None
     logo: str | None = None
+    formats: list[SocialFormat] | None = None
 
 
 class BrandOut(BaseModel):
@@ -36,6 +39,7 @@ class BrandOut(BaseModel):
     description: str = ""
     website: str | None = None
     logo: str | None = None
+    formats: list[SocialFormat] = Field(default_factory=list)
 
 
 class ListBrandsOut(BaseModel):
@@ -51,6 +55,7 @@ def _out(brand) -> BrandOut:
         description=brand.description,
         website=brand.website,
         logo=brand.logo,
+        formats=brand_service.brand_formats(brand),  # type: ignore[arg-type]
     )
 
 
@@ -91,6 +96,7 @@ def create_brand(
             description=body.description,
             website=body.website,
             logo=body.logo,
+            formats=list(body.formats),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -107,13 +113,17 @@ def patch_brand(
     brand = brand_service.get_tenant_brand(db, auth.tenant_id, brand_id)
     if brand is None:
         raise HTTPException(status_code=404, detail="Brand not found")
-    brand = brand_service.update_brand(
-        db,
-        brand,
-        name=body.name,
-        tagline=body.tagline,
-        description=body.description,
-        website=body.website,
-        logo=body.logo,
-    )
+    try:
+        brand = brand_service.update_brand(
+            db,
+            brand,
+            name=body.name,
+            tagline=body.tagline,
+            description=body.description,
+            website=body.website,
+            logo=body.logo,
+            formats=list(body.formats) if body.formats is not None else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _out(brand)

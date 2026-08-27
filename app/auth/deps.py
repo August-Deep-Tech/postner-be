@@ -15,10 +15,6 @@ from app.db.session import get_db
 
 _bearer = HTTPBearer(auto_error=False)
 
-# Stable IDs used when AUTH_DISABLED=1
-DEV_TENANT_ID = uuid.UUID("00000000-0000-4000-8000-000000000001")
-DEV_USER_ID = uuid.UUID("00000000-0000-4000-8000-000000000002")
-
 
 @dataclass
 class AuthContext:
@@ -26,43 +22,6 @@ class AuthContext:
     tenant_id: uuid.UUID
     user: User | None = None
     tenant: Tenant | None = None
-    auth_disabled: bool = False
-
-
-def _ensure_dev_tenant(db: Session) -> tuple[User, Tenant]:
-    tenant = db.get(Tenant, DEV_TENANT_ID)
-    if tenant is None:
-        tenant = Tenant(id=DEV_TENANT_ID, name="Local Dev")
-        db.add(tenant)
-    user = db.get(User, DEV_USER_ID)
-    if user is None:
-        from app.auth.security import hash_password
-
-        user = User(
-            id=DEV_USER_ID,
-            email="dev@localhost",
-            password_hash=hash_password("dev"),
-            name="Local Dev",
-        )
-        db.add(user)
-    membership = db.scalar(
-        select(Membership).where(
-            Membership.tenant_id == DEV_TENANT_ID,
-            Membership.user_id == DEV_USER_ID,
-        )
-    )
-    if membership is None:
-        db.add(
-            Membership(
-                tenant_id=DEV_TENANT_ID,
-                user_id=DEV_USER_ID,
-                role="owner",
-            )
-        )
-    db.commit()
-    db.refresh(tenant)
-    db.refresh(user)
-    return user, tenant
 
 
 def get_current_auth(
@@ -70,16 +29,6 @@ def get_current_auth(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthContext:
-    if settings.auth_disabled:
-        user, tenant = _ensure_dev_tenant(db)
-        return AuthContext(
-            user_id=user.id,
-            tenant_id=tenant.id,
-            user=user,
-            tenant=tenant,
-            auth_disabled=True,
-        )
-
     if credentials is None or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

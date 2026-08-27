@@ -25,7 +25,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postner:postner@db:5432/postner
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      AUTH_DISABLED: ${AUTH_DISABLED:-0}
     volumes:
       - ./app:/app/app
       - ./alembic:/app/alembic

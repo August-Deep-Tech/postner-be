@@ -38,7 +38,6 @@ class MeResponse(BaseModel):
     name: str
     tenant_id: str
     tenant_name: str
-    auth_disabled: bool = False
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -119,5 +118,4 @@ def me(auth: AuthContext = Depends(get_current_auth)) -> MeResponse:
         name=auth.user.name,
         tenant_id=str(auth.tenant_id),
         tenant_name=auth.tenant.name,
-        auth_disabled=auth.auth_disabled,
     )

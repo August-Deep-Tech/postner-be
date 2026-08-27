@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -86,8 +87,8 @@ class Brand(Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     website: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     logo: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    # Preferred social canvas; used as default post format + Recraft aspect
-    format: Mapped[str] = mapped_column(String(32), default="ig_feed", nullable=False)
+    # Enabled social canvases for this brand (ordered; first is default)
+    formats: Mapped[list[Any]] = mapped_column(JsonType, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
@@ -141,6 +142,7 @@ class PostRevision(Base):
         Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     payload: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 

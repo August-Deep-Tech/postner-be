@@ -110,6 +110,17 @@ class ListPostsResponse(BaseModel):
     posts: list[PostResponse]
 
 
+class RevisionItem(BaseModel):
+    id: str
+    kind: str
+    version: int
+    created_at: str
+
+
+class ListRevisionsResponse(BaseModel):
+    revisions: list[RevisionItem]
+
+
 def _post_response(post: Post) -> PostResponse:
     return PostResponse(
         id=str(post.id),
@@ -320,3 +331,35 @@ def post_feedback(
         page_id=row.page_id,
         created_at=row.created_at.isoformat() if row.created_at else "",
     )
+
+
+@router.get("/{post_id}/revisions", response_model=ListRevisionsResponse)
+def get_revisions(
+    post_id: uuid.UUID,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+) -> ListRevisionsResponse:
+    post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
+    rows = post_service.list_revisions(db, post)
+    return ListRevisionsResponse(
+        revisions=[
+            RevisionItem(
+                id=str(r.id),
+                kind=r.kind,
+                version=r.version,
+                created_at=r.created_at.isoformat() if r.created_at else "",
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.post("/{post_id}/undo", response_model=PostResponse)
+def post_undo(
+    post_id: uuid.UUID,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+) -> PostResponse:
+    post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
+    post = post_service.undo_post(db, post)
+    return _post_response(post)
