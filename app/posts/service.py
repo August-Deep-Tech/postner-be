@@ -489,11 +489,11 @@ async def compose_post(
     settings: Settings,
     record_revision: bool = True,
 ) -> Post:
+    """Fill template/pack HTML for preview (no Playwright PNG)."""
     content = post.content or {}
     needed = int(content.get("pack_images_needed") or 0)
     has_images = bool((post.images or {}).get("by_page"))
     if needed > 0 and (not has_images or ensure_images):
-        # Gap-fill only: regenerate=False; do not snapshot mid-compose
         post = await generate_post_images(
             db,
             post=post,
@@ -504,9 +504,7 @@ async def compose_post(
         )
 
     run_dir = Path(post.asset_dir)
-    pages_dir = run_dir / "pages"
-    pages_dir.mkdir(parents=True, exist_ok=True)
-    fmt: SocialFormat = post.format  # type: ignore[assignment]
+    run_dir.mkdir(parents=True, exist_ok=True)
     variant_css = _load_post_variant_css(db, post)
 
     brand_name = content.get("brand") or ""
@@ -517,18 +515,35 @@ async def compose_post(
     composed_pages: list[dict[str, Any]] = list((post.composed or {}).get("pages") or [])
     composed_by_id = {p["page_id"]: p for p in composed_pages}
 
+    def _preview_entry(
+        *,
+        index: int,
+        page_id: str,
+        html_name: str,
+        filled: str,
+        prior: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        html_path = run_dir / html_name
+        html_path.write_text(filled, encoding="utf-8")
+        entry: dict[str, Any] = {
+            "index": index,
+            "page_id": page_id,
+            "html": html_name,
+            "html_source": filled,
+        }
+        # Drop stale PNG fields after re-fill
+        if prior:
+            for key in ("videos",):
+                if key in prior:
+                    entry[key] = prior[key]
+        return entry
+
     try:
         if content.get("mode") == "pack" and post.pack_id:
             pack = load_pack(post.pack_id, settings)
             slides_by_id = {s["page_id"]: s for s in content.get("slides", [])}
-            page_paths: list[str] = []
             for index, page_def in enumerate(pack.sequenced_pages(), start=1):
                 if page_filter is not None and page_def.id not in page_filter:
-                    if page_def.id in composed_by_id:
-                        page_paths.append(
-                            composed_by_id[page_def.id].get("url")
-                            or composed_by_id[page_def.id]["path"]
-                        )
                     continue
                 slide = slides_by_id.get(page_def.id, {})
                 fields = {
@@ -568,22 +583,14 @@ async def compose_post(
                     image_paths=page_images,
                     variant_css=variant_css,
                 )
-                dest = pages_dir / f"{index:02d}_{page_def.id}.png"
-                await screenshot_html(
-                    html=filled,
-                    dest=dest,
-                    format_name=fmt,
-                    work_dir=run_dir,
-                    html_name=f"filled_{index:02d}_{page_def.id}.html",
+                html_name = f"filled_{index:02d}_{page_def.id}.html"
+                composed_by_id[page_def.id] = _preview_entry(
+                    index=index,
+                    page_id=page_def.id,
+                    html_name=html_name,
+                    filled=filled,
+                    prior=composed_by_id.get(page_def.id),
                 )
-                entry = {
-                    "index": index,
-                    "page_id": page_def.id,
-                    "path": str(dest),
-                    "html": f"filled_{index:02d}_{page_def.id}.html",
-                }
-                composed_by_id[page_def.id] = entry
-                page_paths.append(str(dest))
 
             ordered = [
                 composed_by_id[p.id]
@@ -592,8 +599,8 @@ async def compose_post(
             ]
             post.composed = {
                 "pages": ordered,
-                "page_paths": [p["path"] for p in ordered],
-                "final_path": ordered[0]["path"] if ordered else None,
+                "page_paths": [],
+                "final_path": None,
             }
         else:
             image_path = by_page.get("main") or (post.images or {}).get("image_path")
@@ -614,24 +621,18 @@ async def compose_post(
                 tagline=tagline,
                 logo_url=logo_url,
             )
-            final_path = run_dir / "final.png"
-            await screenshot_html(
-                html=filled,
-                dest=final_path,
-                format_name=fmt,
-                work_dir=run_dir,
-            )
             post.composed = {
                 "pages": [
-                    {
-                        "index": 1,
-                        "page_id": "main",
-                        "path": str(final_path),
-                        "html": "filled.html",
-                    }
+                    _preview_entry(
+                        index=1,
+                        page_id="main",
+                        html_name="filled.html",
+                        filled=filled,
+                        prior=composed_by_id.get("main"),
+                    )
                 ],
-                "page_paths": [str(final_path)],
-                "final_path": str(final_path),
+                "page_paths": [],
+                "final_path": None,
             }
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -640,10 +641,14 @@ async def compose_post(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Compose failed: {exc}") from exc
 
-    post.composed = _upload_composed_assets(db, post, settings)
-    post.status = "composed"
+    # Clear prior render outputs at top level
+    composed = dict(post.composed or {})
+    for stale in ("videos", "video_path", "page_video_paths", "video_urls", "video_keys"):
+        composed.pop(stale, None)
+    post.composed = composed
+    post.status = "preview"
     if record_revision:
-        _add_revision(db, post, "compose")
+        _add_revision(db, post, "preview")
     meta_path = run_dir / "meta.json"
     meta = {
         "post_id": str(post.id),
@@ -652,11 +657,123 @@ async def compose_post(
         "format": post.format,
         "pack_id": post.pack_id,
         "template_id": post.template_id,
-        "composed": post.composed,
+        "composed": {
+            "pages": [
+                {
+                    "index": p.get("index"),
+                    "page_id": p.get("page_id"),
+                    "html": p.get("html"),
+                    "html_source_len": len(p.get("html_source") or ""),
+                }
+                for p in (post.composed or {}).get("pages") or []
+            ]
+        },
         "images": post.images,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+def _page_has_png(page: dict[str, Any]) -> bool:
+    return bool(page.get("url") or page.get("path"))
+
+
+def _post_has_pngs(post: Post) -> bool:
+    pages = list((post.composed or {}).get("pages") or [])
+    return bool(pages) and all(_page_has_png(p) for p in pages)
+
+
+async def render_post(
+    db: Session,
+    *,
+    post: Post,
+    pages: list[str] | None = None,
+    settings: Settings,
+    record_revision: bool = True,
+) -> Post:
+    """Playwright PNG from filled HTML + object-storage upload."""
+    composed_pages = list((post.composed or {}).get("pages") or [])
+    if not composed_pages:
+        raise HTTPException(
+            status_code=400,
+            detail="Fill HTML first via POST /posts/{id}/compose",
+        )
+
+    run_dir = Path(post.asset_dir)
+    pages_dir = run_dir / "pages"
+    pages_dir.mkdir(parents=True, exist_ok=True)
+    fmt: SocialFormat = post.format  # type: ignore[assignment]
+    page_filter = set(pages) if pages else None
+    content = post.content or {}
+    is_pack = content.get("mode") == "pack" and bool(post.pack_id)
+
+    try:
+        updated: list[dict[str, Any]] = []
+        for entry in composed_pages:
+            item = dict(entry)
+            pid = item.get("page_id") or "main"
+            if page_filter is not None and pid not in page_filter:
+                updated.append(item)
+                continue
+
+            html_source = item.get("html_source")
+            html_name = item.get("html") or (
+                f"filled_{int(item.get('index') or 1):02d}_{pid}.html"
+                if is_pack
+                else "filled.html"
+            )
+            if not html_source:
+                html_path = run_dir / html_name
+                if html_path.is_file():
+                    html_source = html_path.read_text(encoding="utf-8")
+                    item["html_source"] = html_source
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Missing html_source for page '{pid}'; recompose first",
+                    )
+            else:
+                # Keep disk in sync for Playwright file:// loads of nested assets
+                (run_dir / html_name).write_text(html_source, encoding="utf-8")
+
+            index = int(item.get("index") or 1)
+            if is_pack:
+                dest = pages_dir / f"{index:02d}_{pid}.png"
+            else:
+                dest = run_dir / "final.png"
+
+            await screenshot_html(
+                html=html_source,
+                dest=dest,
+                format_name=fmt,
+                work_dir=run_dir,
+                html_name=html_name,
+            )
+            item["path"] = str(dest)
+            item["html"] = html_name
+            # Drop old CDN url/key until upload refreshes them
+            item.pop("url", None)
+            item.pop("key", None)
+            updated.append(item)
+
+        post.composed = {
+            **dict(post.composed or {}),
+            "pages": updated,
+            "page_paths": [p.get("path") for p in updated if p.get("path")],
+            "final_path": next((p.get("path") for p in updated if p.get("path")), None),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Render failed: {exc}") from exc
+
+    post.composed = _upload_composed_assets(db, post, settings)
+    post.status = "rendered"
+    if record_revision:
+        _add_revision(db, post, "render")
     db.commit()
     db.refresh(post)
     return post
@@ -671,8 +788,13 @@ async def animate_post(
     motion_preset: str,
     settings: Settings,
 ) -> Post:
-    if not post.composed:
+    if not post.composed or not (post.composed or {}).get("pages"):
         raise HTTPException(status_code=400, detail="Compose the post before animating")
+    if not _post_has_pngs(post):
+        raise HTTPException(
+            status_code=400,
+            detail="Render PNGs first via POST /posts/{id}/render or approve",
+        )
 
     run_dir = Path(post.asset_dir)
     pages_dir = run_dir / "pages"
@@ -693,11 +815,16 @@ async def animate_post(
         pid = entry["page_id"]
         if target_ids is not None and pid not in target_ids:
             continue
+        html_source = entry.get("html_source")
         html_name = entry.get("html") or f"filled_{entry.get('index', 1):02d}_{pid}.html"
-        html_path = run_dir / html_name
-        if not html_path.is_file():
-            continue
-        html = html_path.read_text(encoding="utf-8")
+        if html_source:
+            html = html_source
+            (run_dir / html_name).write_text(html, encoding="utf-8")
+        else:
+            html_path = run_dir / html_name
+            if not html_path.is_file():
+                continue
+            html = html_path.read_text(encoding="utf-8")
         if content.get("mode") == "pack":
             dest = pages_dir / f"{entry['index']:02d}_{pid}.mp4"
         else:
@@ -993,7 +1120,7 @@ def undo_post(db: Session, post: Post) -> Post:
     return post
 
 
-def add_feedback(
+async def add_feedback(
     db: Session,
     *,
     post: Post,
@@ -1002,7 +1129,18 @@ def add_feedback(
     reasons: list[str],
     note: str,
     page_id: str | None,
+    settings: Settings | None = None,
 ) -> Feedback:
+    if decision == "approved" and settings is not None and not _post_has_pngs(post):
+        if not (post.composed or {}).get("pages"):
+            raise HTTPException(
+                status_code=400,
+                detail="Compose HTML preview before approving",
+            )
+        post = await render_post(
+            db, post=post, pages=None, settings=settings, record_revision=True
+        )
+
     row = Feedback(
         post_id=post.id,
         tenant_id=post.tenant_id,

@@ -4,6 +4,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.config import Settings, SocialFormat, get_settings
 from app.db.models import Post
 from app.db.session import get_db
 from app.posts import service as post_service
+from app.posts.preview import enrich_composed_with_html, page_preview_html
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -135,7 +137,7 @@ def _post_response(post: Post) -> PostResponse:
         asset_dir=post.asset_dir,
         content=post.content or {},
         images=post.images or {},
-        composed=post.composed or {},
+        composed=enrich_composed_with_html(post),
         meta=post.meta or {},
         created_at=post.created_at.isoformat() if post.created_at else "",
         updated_at=post.updated_at.isoformat() if post.updated_at else "",
@@ -183,6 +185,28 @@ def get_post(
     return _post_response(post)
 
 
+@router.get("/{post_id}/pages/{page_id}/html", response_class=HTMLResponse)
+def get_page_preview_html(
+    post_id: uuid.UUID,
+    page_id: str,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Browser-ready filled HTML for iframe / srcdoc (images inlined as data URIs)."""
+    post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
+    pages = list((post.composed or {}).get("pages") or [])
+    page = next((p for p in pages if str(p.get("page_id")) == page_id), None)
+    if page is None:
+        raise HTTPException(status_code=404, detail=f"Page '{page_id}' not found")
+    html = page_preview_html(post, page)
+    if not html:
+        raise HTTPException(
+            status_code=404,
+            detail="Filled HTML not found; call POST /posts/{id}/compose first",
+        )
+    return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
+
+
 @router.post("/{post_id}/images", response_model=PostResponse)
 async def post_images(
     post_id: uuid.UUID,
@@ -217,6 +241,26 @@ async def post_compose(
         post=post,
         pages=body.pages,
         ensure_images=body.ensure_images,
+        settings=settings,
+    )
+    return _post_response(post)
+
+
+@router.post("/{post_id}/render", response_model=PostResponse)
+async def post_render(
+    post_id: uuid.UUID,
+    body: ComposeRequest | None = None,
+    auth: AuthContext = Depends(get_current_auth),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> PostResponse:
+    """Generate download PNGs from filled HTML (Playwright + storage upload)."""
+    body = body or ComposeRequest()
+    post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
+    post = await post_service.render_post(
+        db,
+        post=post,
+        pages=body.pages,
         settings=settings,
     )
     return _post_response(post)
@@ -306,14 +350,15 @@ async def post_rewrite(
 
 
 @router.post("/{post_id}/feedback", response_model=FeedbackResponse)
-def post_feedback(
+async def post_feedback(
     post_id: uuid.UUID,
     body: FeedbackRequest,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> FeedbackResponse:
     post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
-    row = post_service.add_feedback(
+    row = await post_service.add_feedback(
         db,
         post=post,
         user_id=auth.user_id,
@@ -321,6 +366,7 @@ def post_feedback(
         reasons=body.reasons,
         note=body.note,
         page_id=body.page_id,
+        settings=settings,
     )
     return FeedbackResponse(
         id=str(row.id),

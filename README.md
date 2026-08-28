@@ -1,12 +1,12 @@
 # Postner BE
 
-Multi-tenant FastAPI backend: register → brands → draft post → Recraft images → compose PNG → polish.
+Multi-tenant FastAPI backend: register → brands → draft post → Recraft images → HTML preview → approve/render PNG → polish.
 
 ## Stack
 
 - **Auth:** email/password + JWT
 - **DB:** Postgres (Docker) — tenants, brands, **brand variants**, posts, revisions
-- **Assets:** Docker volume `/app/output`; composed PNG/MP4 → object storage when `STORAGE_BACKEND=s3`
+- **Assets:** Docker volume `/app/output`; filled HTML tracked in `posts.composed`; PNG/MP4 → object storage when `STORAGE_BACKEND=s3`
 - **Packs/templates:** on disk (shared catalog). Starter variant JSON under `variants/` is **seeded into each brand** on create.
 
 ## Quick start (Docker)
@@ -47,8 +47,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 2. `GET/POST/PATCH /brands` (Bearer token; user creates brands — no demo seed)
 3. `POST /posts` — scrape + LLM draft (`with_images` optional)
 4. `POST /posts/{id}/images` — Recraft source photos (reuse unless `regenerate`)
-5. `POST /posts/{id}/compose` — **final rendered PNG(s)** (`ensure_images` gap-fills)
-6. Optional: `animate` | `resize` | `redesign` | `rewrite` | `undo` | `feedback`
+5. `POST /posts/{id}/compose` — **fill HTML only** → status `preview` (`ensure_images` gap-fills photos). FE reviews via `composed.pages[].html_content`
+6. `POST /posts/{id}/feedback` `{ "decision": "approved" }` — auto-renders PNG if missing → `approved`; **or** `POST /posts/{id}/render` for PNGs without approving
+7. Optional: `animate` | `resize` | `redesign` | `rewrite` | `undo`
 
 ### Auth
 
@@ -65,19 +66,22 @@ JWT claims: `sub` (user_id), `tenant_id`. Set `Authorization: Bearer <token>` on
 | Method | Path | Role |
 |---|---|---|
 | POST | `/posts` | Draft (`url`, `brand_id`, `pack_id`\|`template_id`, `format`, `variant_id`, `with_images`) |
-| GET | `/posts/{id}` | Full state (tenant-scoped) |
+| GET | `/posts/{id}` | Full state (tenant-scoped); `composed` enriched with `html_content` |
+| GET | `/posts/{id}/pages/{page_id}/html` | Browser-ready filled HTML for one page |
 | POST | `/posts/{id}/images` | Recraft (`pages?`, `regenerate`) |
-| POST | `/posts/{id}/compose` | Final PNG (`pages?`, `ensure_images`) |
-| POST | `/posts/{id}/animate` | MP4 (`motion_preset`) |
-| POST | `/posts/{id}/resize` | Recompose at `format` |
-| POST | `/posts/{id}/redesign` | `variant_id` and/or `propose: true` (auto color skin), then recompose |
-| POST | `/posts/{id}/rewrite` | Caption/text or `suggest` re-LLM |
+| POST | `/posts/{id}/compose` | Fill HTML preview (`pages?`, `ensure_images`) — no Playwright |
+| POST | `/posts/{id}/render` | Playwright PNG + upload (`pages?`) → status `rendered` |
+| POST | `/posts/{id}/animate` | MP4 (`motion_preset`); requires rendered PNGs |
+| POST | `/posts/{id}/resize` | Re-fill HTML at `format` (clears PNG urls; call `/render` after) |
+| POST | `/posts/{id}/redesign` | `variant_id` and/or `propose: true`, then re-fill HTML if `recompose` |
+| POST | `/posts/{id}/rewrite` | Caption/text or `suggest` re-LLM; `recompose` re-fills HTML |
 | POST | `/posts/{id}/undo` | Restore previous revision snapshot |
 | GET | `/posts/{id}/revisions` | List `{ id, kind, version, created_at }` |
-| POST | `/posts/{id}/feedback` | `decision`, `reasons[]`, `note` |
+| POST | `/posts/{id}/feedback` | `decision`, `reasons[]`, `note`; **approved** auto-renders if no PNGs |
 
 `format`: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post` | **`x_post`** (1600×900)
 
+**Statuses:** `drafted` → `preview` (HTML) → `rendered` (PNG) → `approved` / `rejected`.
 ### Packs + variants (design propose)
 
 Packs are multi-page templates on disk. **Variants are per-brand color palettes in Postgres** (`brand_variants`). Creating a brand seeds starter palettes from `variants/*.json`.

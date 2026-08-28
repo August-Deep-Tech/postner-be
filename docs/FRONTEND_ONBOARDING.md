@@ -39,12 +39,12 @@ flowchart TD
   packs[GET /packs]
   draft[POST /posts]
   images[POST /posts/id/images]
-  compose[POST /posts/id/compose]
-  review[Review UI]
+  compose[POST /posts/id/compose HTML fill]
+  review[Review UI html_content]
   reject[Reject + reasons]
   edit[Edit rewrite/redesign]
-  approve[Approve feedback]
-  download[Download + optional resize]
+  approve[Approve feedback auto-renders PNG]
+  download[Download urls + optional resize]
   register --> brand --> packs --> draft --> images --> compose --> review
   review --> reject
   review --> edit
@@ -124,24 +124,23 @@ POST /posts/{post_id}/images
 { "regenerate": false }
 ```
 
-### Step 6 — Compose final PNG(s)
+### Step 6 — Compose HTML preview (no PNG yet)
 
-This is the **final rendered post image** (not Recraft alone).
+Fills pack/template HTML only. Status → `preview`. Playwright + upload happen on **approve** or `POST /render`.
 
 ```http
 POST /posts/{post_id}/compose
 { "ensure_images": true }
 ```
 
-- `ensure_images: true` fills missing photos once, then Playwright PNGs.
-- Response `composed.pages[].url` (and `composed.page_paths`) are the URLs to preview/download.
-  - With `STORAGE_BACKEND=s3`, these are public CDN/bucket URLs.
-  - With `STORAGE_BACKEND=local` (default smoke), they stay as local filesystem paths.
-- Poll or await; then open **Review UI** with composed preview.
+- `ensure_images: true` gap-fills Recraft photos if needed, then fills HTML.
+- Review with `composed.pages[].html_content` (browser-ready data URIs) via `iframe.srcdoc`, or `GET /posts/{id}/pages/{page_id}/html`.
+- `composed.pages[].url` / `path` / `key` are **absent** until render.
+- Optional early PNG (without approving): `POST /posts/{id}/render`.
 
-### Step 7 — Review UI (screenshot)
+### Step 7 — Review UI (HTML preview)
 
-Render the composed slide(s) or caption preview in the dark card. Wire the three buttons:
+Render each slide with **`html_content`** in an iframe (`srcdoc`), not a PNG `<img>`. Wire the three buttons:
 
 #### Reject (red)
 
@@ -178,16 +177,18 @@ POST /posts/{post_id}/feedback
 { "decision": "needs_changes", "reasons": [], "note": "..." }
 ```
 
-#### Approve (green) → then download
+#### Approve (green) → server renders PNG → download
 
-**v1 (now):** green = approve, then show download UI.
+**v1 (now):** green = approve. Server runs Playwright + storage upload if PNGs are missing, then sets `approved`.
 
 ```http
 POST /posts/{post_id}/feedback
 { "decision": "approved", "reasons": [], "note": "" }
 ```
 
-Post `status` → `approved`. Immediately open **Download** sheet (do not wait for scheduling).
+- May take several seconds (PNG render). Await the response, then `GET /posts/{id}` for `composed.pages[].url`.
+- Open **Download** sheet with those URLs.
+- Optional without approving: `POST /posts/{id}/render` → status `rendered`.
 
 **Later:** green becomes “approve for schedule”; download may move to a secondary control.
 
@@ -213,9 +214,16 @@ POST /posts/{post_id}/resize
 }
 ```
 
-3. Download the PNG(s) from `composed.pages[].url` (or `composed.page_paths`). For packs, zip or multi-file download of each page.
+Resize **re-fills HTML only** and clears PNG urls. Then re-render before download:
 
-Optional polish (not required for first download): `POST /posts/{id}/animate` for MP4.
+```http
+POST /posts/{post_id}/render
+{}
+```
+
+3. Download the PNG(s) from `composed.pages[].url`. For packs, zip or multi-file download of each page.
+
+Optional polish (not required for first download): `POST /posts/{id}/animate` for MP4 (requires rendered PNGs).
 
 ---
 
@@ -235,17 +243,32 @@ Content-Type: application/json
 | Register / Login | Step 1 |
 | Brand setup | name, website, logo — Step 2 |
 | New post | URL + pack/template + format — Steps 3–4 |
-| Generating | Progress for draft → images → compose |
-| **Review** | Screenshot UI — Step 7 |
+| Generating | Progress for draft → images → HTML compose |
+| **Review** | HTML preview (`html_content`) — Step 7 |
 | Reject sheet | Reasons + note |
 | Edit sheet | Rewrite / redesign / undo |
 | Download sheet | Format/resize + download CTA |
 
 ---
 
-## Composed asset URLs
+## Preview HTML vs download URLs
 
-After compose (and recompose paths: resize / redesign / rewrite / animate), each page includes:
+### After compose / recompose (review)
+
+```json
+{
+  "page_id": "cover",
+  "html": "filled_01_cover.html",
+  "html_source": "<!DOCTYPE html>...",
+  "html_content": "<!DOCTYPE html>...data URIs..."
+}
+```
+
+- **`html_content`** — response-only (not stored); use for `iframe.srcdoc`.
+- **`html_source`** — tracked in DB (revision/undo); keeps `file://` for Playwright.
+- No `url` until render/approve.
+
+### After render or approve
 
 ```json
 {
@@ -256,9 +279,9 @@ After compose (and recompose paths: resize / redesign / rewrite / animate), each
 }
 ```
 
-- FE should prefer **`url`** for `<img src>` and download.
-- Storage is env-swappable (`STORAGE_BACKEND=local|s3`); S3-compatible backends (Cloudflare R2, AWS S3, MinIO) share the same code path.
-- Recraft intermediates are **not** uploaded — only final compose PNG/MP4.
+- Prefer **`url`** for download / `<img>`.
+- Storage is env-swappable (`STORAGE_BACKEND=local|s3`).
+- Recraft intermediates are **not** uploaded — only final PNG/MP4.
 
 ---
 
@@ -275,9 +298,11 @@ After compose (and recompose paths: resize / redesign / rewrite / animate), each
 | Propose variants | POST | `/variants/propose` (`brand_id` required) |
 | Draft | POST | `/posts` |
 | Photos | POST | `/posts/{id}/images` |
-| Final PNG | POST | `/posts/{id}/compose` |
+| HTML preview | POST | `/posts/{id}/compose` |
+| Page HTML | GET | `/posts/{id}/pages/{page_id}/html` |
+| PNG render | POST | `/posts/{id}/render` |
 | Get state | GET | `/posts/{id}` |
-| Reject / approve | POST | `/posts/{id}/feedback` |
+| Reject / approve (approve auto-renders) | POST | `/posts/{id}/feedback` |
 | Edit copy | POST | `/posts/{id}/rewrite` |
 | Edit look | POST | `/posts/{id}/redesign` |
 | Resize | POST | `/posts/{id}/resize` |

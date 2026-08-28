@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="dev-secret-change-me", alias="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expire_minutes: int = Field(default=60 * 24 * 7, alias="JWT_EXPIRE_MINUTES")
+    # Comma-separated FE origins; empty → allow all (dev)
+    cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
     # Object storage (S3-compatible: R2, AWS S3, MinIO, …). Default local = no upload.
     storage_backend: str = Field(default="local", alias="STORAGE_BACKEND")

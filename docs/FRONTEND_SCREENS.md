@@ -81,7 +81,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `post_template` | Template | Select | choice | `template_id` | From `GET /templates`; default `basic` if neither |
 | `post_format` | Format | Select chips | choice | `format` | Must be one of **brand.formats**. Default: first brand format. Options = brand’s enabled list only |
 | `post_variant` | Color variant | Select (optional) | choice | `variant_id` | From `GET /variants?brand_id=`; nullable |
-| `post_with_images` | Generate photos now | Toggle | boolean | `with_images` | Default **false** (cheaper draft). Still need compose for PNG |
+| `post_with_images` | Generate photos now | Toggle | boolean | `with_images` | Default **false** (cheaper draft). Still need compose for HTML preview |
 | `post_submit` | Generate | Button (primary) | button | `POST /posts` | Then Generating screen |
 
 ### Format options (for `post_format`)
@@ -102,13 +102,13 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | Generate | `POST /posts` | Generating (pass `post_id`) |
 | Prefetch catalogs | `GET /packs`, `GET /templates`, `GET /variants?brand_id=` | On screen mount (variants need brand) |
 
-**Note:** `with_images: true` is **not** compose. Compose still required for the final PNG.
+**Note:** `with_images: true` is **not** compose. Compose fills HTML for review; PNG render runs on approve or `POST /render`.
 
 ---
 
 ## 4. Generating
 
-**Purpose:** Progress while draft → images → compose run. No editable fields.  
+**Purpose:** Progress while draft → images → HTML compose. No editable fields.  
 **Layout:** Centered progress. Same on mobile/desktop.
 
 | ID | Label / content | Component | Type | API binding | Validation / notes |
@@ -116,7 +116,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `gen_title` | Creating your post… | Heading | text | — | Static |
 | `gen_step_draft` | Drafting copy | Progress step | status | `POST /posts` (already done or in flight) | Done when `post_id` returned |
 | `gen_step_images` | Generating photos | Progress step | status | `POST /posts/{id}/images` | Skip if text-only pack |
-| `gen_step_compose` | Composing design | Progress step | status | `POST /posts/{id}/compose` `{ "ensure_images": true }` | Final PNG step |
+| `gen_step_compose` | Building preview | Progress step | status | `POST /posts/{id}/compose` `{ "ensure_images": true }` | HTML fill → status `preview` |
 | `gen_error` | Error message | Alert | text | HTTP error body | Retry / back |
 | `gen_spinner` | Loading | Spinner | feedback | — | Until compose succeeds |
 
@@ -127,13 +127,13 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | Draft | `POST /posts` | From New post form |
 | Images | `POST /posts/{id}/images` | `{ "regenerate": false }` (skip if no images needed) |
 | Compose | `POST /posts/{id}/compose` | `{ "ensure_images": true }` |
-| Done | `GET /posts/{id}` | Open **Review** with composed assets |
+| Done | `GET /posts/{id}` | Open **Review** with `html_content` |
 
 ---
 
 ## 5. Review
 
-**Purpose:** Review composed post; reject / edit / approve.  
+**Purpose:** Review HTML preview; reject / edit / approve (approve triggers PNG).  
 **Reference:** [review-screen-reference.png](./review-screen-reference.png)  
 **Layout:** Mobile — centered card, FAB row fixed bottom. Desktop — same card + FABs; widen column (~480–560px for X-style; larger for carousel).
 
@@ -144,8 +144,8 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `rev_display_name` | Display name | Text | text | Brand `name` | e.g. “Jaachiii” |
 | `rev_verified` | Verified mark | Icon | icon | — | Decorative / brand badge |
 | `rev_handle` | @handle | Text | text | Derive from brand slug/name | Secondary |
-| `rev_body` | Post body / overlay | Text block | text | `content.ig_fb_caption` or slide fields / composed preview | For packs: show current slide |
-| `rev_preview` | Composed PNG | Image | image | `composed.pages[].url` (fallback `path`) | Primary visual; carousel pager if pack |
+| `rev_body` | Post body / overlay | Text block | text | `content.ig_fb_caption` or slide fields | For packs: show current slide |
+| `rev_preview` | HTML preview | iframe | html | `composed.pages[].html_content` (`srcdoc`) | Primary visual; not PNG until approve |
 | `rev_slide_pager` | Slide dots / swipe | Pager | navigation | `content.slides[]` / composed pages | Packs only |
 | `rev_meta_icons` | Comment / repost / like / stats | Icon row | icon | — | Decorative chrome (X-style) |
 | `rev_schedule_line` | Schedule for … | Text | text | — | Placeholder v1; scheduling later |
@@ -160,7 +160,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 |---|---|
 | Reject FAB | Open screen 6 |
 | Edit FAB | Open screen 7 |
-| Approve FAB | `POST /posts/{id}/feedback` `{ "decision": "approved" }` → open screen 8 |
+| Approve FAB | `POST /posts/{id}/feedback` `{ "decision": "approved" }` (awaits PNG render) → open screen 8 |
 | Refresh state | `GET /posts/{id}` |
 
 ---
@@ -204,7 +204,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | `edit_body_2` | Body 2 | Textarea | text | `text.body_2` | Pack-dependent |
 | `edit_cta` | CTA | Text input | text | `text.cta` | |
 | `edit_suggest` | Suggest with AI | Toggle / button | boolean | `suggest` | If true, LLM fills empty/targets |
-| `edit_recompose` | Update preview | Toggle | boolean | `recompose` | Default true if PNGs exist |
+| `edit_recompose` | Update preview | Toggle | boolean | `recompose` | Default true; re-fills HTML only |
 | `edit_copy_save` | Apply copy | Button (primary) | button | `POST /posts/{id}/rewrite` | Refresh Review preview |
 
 ### Tab: Look (redesign)
@@ -239,20 +239,21 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | ID | Label / content | Component | Type | API binding | Validation / notes |
 |---|---|---|---|---|---|
 | `dl_title` | Download | Heading | text | — | Shown after approve |
-| `dl_preview` | Preview | Image | image | Current composed PNG(s) | |
+| `dl_preview` | Preview | Image | image | `composed.pages[].url` | PNG after approve/render |
 | `dl_format` | Size / platform | Chip group / select | choice | `POST .../resize` → `format` | Options = **brand.formats** only (see format table) |
-| `dl_apply_format` | Apply size | Button (secondary) | button | `resize` `{ "apply_to_post": true }` | Only if format ≠ current |
+| `dl_apply_format` | Apply size | Button (secondary) | button | `resize` then `render` | Resize re-fills HTML; must re-render PNGs |
 | `dl_pages` | Which slides | Multi-select | choice[] | `resize.pages` / compose pages | Packs; default all |
 | `dl_download` | Download | Button (primary) | button | `composed.pages[].url` | Prefer public/storage URL |
-| `dl_animate` | Also make video | Optional toggle + button | boolean | `POST .../animate` | Optional; not required for v1 |
+| `dl_animate` | Also make video | Optional toggle + button | boolean | `POST .../animate` | Requires rendered PNGs |
 | `dl_done` | Done | Button (ghost) | button | — | Exit to list / home |
 
 ### Actions
 
 | Control | Route | Notes |
 |---|---|---|
-| Approve (from Review) | `POST /posts/{id}/feedback` `{ "decision": "approved" }` | Opens this sheet |
-| Apply size | `POST /posts/{id}/resize` | `{ "format": "x_post", "apply_to_post": true }` |
+| Approve (from Review) | `POST /posts/{id}/feedback` `{ "decision": "approved" }` | Auto-renders PNG if missing; opens this sheet |
+| Optional early PNG | `POST /posts/{id}/render` | Without approving |
+| Apply size | `POST /posts/{id}/resize` then `POST /posts/{id}/render` | Resize clears PNG urls |
 | Download | `composed.pages[].url` | Public when `STORAGE_BACKEND=s3`; local path when `local` |
 | Optional MP4 | `POST /posts/{id}/animate` | `{ "motion_preset": "fade_kenburns" }` |
 
