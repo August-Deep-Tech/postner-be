@@ -12,7 +12,6 @@ from app.templates.engine import (
     apply_color_variant,
     ensure_locked_font,
     fill_placeholders,
-    path_to_file_url,
 )
 
 
@@ -135,7 +134,7 @@ def render_pack_page_html(
     page: PackPage,
     fields: dict[str, str],
     settings: Settings,
-    image_paths: list[Path] | None = None,
+    image_urls: list[str] | None = None,
     variant_css: dict[str, str] | None = None,
 ) -> str:
     html = load_pack_page_html(pack, page)
@@ -153,12 +152,12 @@ def render_pack_page_html(
     values.setdefault("tagline", "")
     values.setdefault("logo_url", "")
 
-    images = image_paths or []
+    images = image_urls or []
     if page.images > 0 and images:
-        values["image_url"] = path_to_file_url(images[0])
-        for i, path in enumerate(images[1:], start=2):
-            values[f"image_{i}"] = path_to_file_url(path)
-            values[f"image_url_{i}"] = path_to_file_url(path)
+        values["image_url"] = images[0]
+        for i, url in enumerate(images[1:], start=2):
+            values[f"image_{i}"] = url
+            values[f"image_url_{i}"] = url
 
     return fill_placeholders(html, values)
 

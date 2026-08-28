@@ -254,7 +254,7 @@ Formats used below: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post
 | Approve (from Review) | `POST /posts/{id}/feedback` `{ "decision": "approved" }` | Auto-renders PNG if missing; opens this sheet |
 | Optional early PNG | `POST /posts/{id}/render` | Without approving |
 | Apply size | `POST /posts/{id}/resize` then `POST /posts/{id}/render` | Resize clears PNG urls |
-| Download | `composed.pages[].url` | Public when `STORAGE_BACKEND=s3`; local path when `local` |
+| Download | `composed.pages[].url` | Public MinIO/CDN URL after render/approve |
 | Optional MP4 | `POST /posts/{id}/animate` | `{ "motion_preset": "fade_kenburns" }` |
 
 ---

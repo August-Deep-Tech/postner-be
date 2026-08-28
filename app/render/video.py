@@ -16,9 +16,7 @@ async def render_html_video(
     html: str,
     dest: Path,
     format_name: SocialFormat,
-    work_dir: Path,
     motion_preset: str = "fade_kenburns",
-    html_name: str = "filled_motion.html",
     duration_s: float = MOTION_DURATION_S,
     fps: int = MOTION_FPS,
 ) -> Path:
@@ -27,15 +25,11 @@ async def render_html_video(
         raise RuntimeError("ffmpeg is not installed or not on PATH")
 
     width, height = get_size(format_name)
-    work_dir.mkdir(parents=True, exist_ok=True)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     motion_html = apply_motion_preset(html, motion_preset)
-    html_path = work_dir / html_name
-    html_path.write_text(motion_html, encoding="utf-8")
-
     frame_count = max(1, int(round(duration_s * fps)))
-    frames_dir = Path(tempfile.mkdtemp(prefix="postner_frames_", dir=str(work_dir)))
+    frames_dir = Path(tempfile.mkdtemp(prefix="postner_frames_"))
 
     try:
         async with async_playwright() as p:
@@ -45,11 +39,10 @@ async def render_html_video(
                     viewport={"width": width, "height": height},
                     device_scale_factor=1,
                 )
-                await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
+                await page.set_content(motion_html, wait_until="networkidle")
                 await page.wait_for_timeout(400)
                 await page.evaluate("() => document.fonts.ready")
 
-                # Freeze timeline so we can scrub currentTime per frame
                 await page.evaluate(
                     """() => {
                       for (const a of document.getAnimations({subtree: true})) {

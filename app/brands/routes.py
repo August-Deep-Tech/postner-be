@@ -112,6 +112,7 @@ def patch_brand(
     body: PatchBrandBody,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> BrandOut:
     brand = brand_service.get_tenant_brand(db, auth.tenant_id, brand_id)
     if brand is None:
@@ -126,6 +127,7 @@ def patch_brand(
             website=body.website,
             logo=body.logo,
             formats=list(body.formats) if body.formats is not None else None,
+            settings=settings,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

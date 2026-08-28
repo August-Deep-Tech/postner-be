@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,17 +12,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.brands.service import brand_formats, brand_to_profile, get_tenant_brand
-from app.brands.store import BrandProfile, resolve_logo_path
+from app.brands.store import BrandProfile
 from app.brands.variants import get_brand_variant
 from app.config import Settings, SocialFormat, has_llm_credentials
 from app.db.models import Brand, Feedback, Post, PostRevision
 from app.generate.posts import generate_carousel, generate_post
-from app.images.recraft import generate_recraft_image
+from app.images.recraft import generate_recraft_image_bytes
 from app.render.screenshot import screenshot_html
 from app.render.video import render_html_video
 from app.scrape.page import scrape_page
 from app.storage import get_storage
-from app.templates.engine import path_to_file_url, render_filled_html
+from app.templates.engine import render_filled_html
 from app.templates.packs import load_pack, render_pack_page_html
 from app.templates.variants import propose_and_save_variants
 
@@ -69,23 +69,55 @@ def _resolve_format(
     return "ig_feed"
 
 
-def _new_run_dir(settings: Settings) -> tuple[str, Path]:
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-    run_dir = settings.output_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_id, run_dir
+def _new_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+
+
+def _is_http_url(value: str | None) -> bool:
+    v = (value or "").strip().lower()
+    return v.startswith("http://") or v.startswith("https://")
 
 
 def _brand_fields(
     profile: BrandProfile | None,
+    brand_row: Brand | None = None,
 ) -> tuple[str, str, str, str]:
-    if not profile:
+    if not profile and not brand_row:
         return "", "", "", ""
-    logo_url = ""
-    logo_path = resolve_logo_path(profile)
-    if logo_path:
-        logo_url = path_to_file_url(logo_path)
-    return profile.name, profile.tagline, profile.description, logo_url
+    name = (brand_row.name if brand_row else None) or (profile.name if profile else "") or ""
+    tagline = (
+        (brand_row.tagline if brand_row else None)
+        or (profile.tagline if profile else "")
+        or ""
+    )
+    description = (
+        (brand_row.description if brand_row else None)
+        or (profile.description if profile else "")
+        or ""
+    )
+    logo = (brand_row.logo if brand_row else None) or (profile.logo if profile else None) or ""
+    logo_url = logo.strip() if _is_http_url(logo) else ""
+    return name, tagline, description, logo_url
+
+
+def _image_ref_url(ref: Any) -> str | None:
+    """Extract public URL from by_page entry (dict or legacy string)."""
+    if isinstance(ref, dict):
+        url = ref.get("url")
+        return str(url) if _is_http_url(str(url or "")) else None
+    if isinstance(ref, str) and _is_http_url(ref):
+        return ref
+    return None
+
+
+def _image_ref_has_asset(ref: Any) -> bool:
+    if isinstance(ref, dict):
+        return bool(ref.get("url") or ref.get("key"))
+    return _is_http_url(str(ref or ""))
+
+
+def _source_object_key(post: Post, filename: str) -> str:
+    return f"tenants/{post.tenant_id}/posts/{post.id}/sources/{filename}"
 
 
 def _next_revision_version(db: Session, post_id: UUID) -> int:
@@ -140,71 +172,79 @@ def _upload_composed_assets(
     db: Session,
     post: Post,
     settings: Settings,
+    *,
+    cleanup_locals: bool = True,
 ) -> dict[str, Any]:
-    """Upload composed PNG/MP4 via ObjectStorage; attach url/key on composed payload."""
+    """Upload composed PNG/MP4 via ObjectStorage; attach url/key; drop local paths."""
     storage = get_storage(settings)
     ver = _next_revision_version(db, post.id)
     is_pack = (post.content or {}).get("mode") == "pack"
     composed = dict(post.composed or {})
+    temps_to_delete: list[Path] = []
 
     pages_out: list[dict[str, Any]] = []
     for entry in list(composed.get("pages") or []):
         item = dict(entry)
         local = item.get("path")
-        if local and Path(local).is_file():
-            name = Path(local).name
+        local_path = Path(local) if local else None
+        if local_path and local_path.is_file():
+            name = local_path.name
             relative = f"pages/{name}" if is_pack else name
             key = _object_key(post, ver, relative)
             try:
-                url = storage.upload(Path(local), key)
+                url = storage.upload(local_path, key)
             except Exception as exc:  # noqa: BLE001
                 raise HTTPException(
                     status_code=502, detail=f"Asset upload failed: {exc}"
                 ) from exc
             item["key"] = key
             item["url"] = url
+            temps_to_delete.append(local_path)
+        item.pop("path", None)
         pages_out.append(item)
 
     composed["pages"] = pages_out
-    composed["page_paths"] = [p.get("url") or p.get("path") for p in pages_out]
-    composed["final_path"] = (
-        (pages_out[0].get("url") or pages_out[0].get("path")) if pages_out else None
-    )
+    composed["page_paths"] = [p.get("url") for p in pages_out if p.get("url")]
+    composed["final_path"] = pages_out[0].get("url") if pages_out else None
 
     videos_in = dict(composed.get("videos") or {})
-    videos_out: dict[str, str] = {}
     video_urls: dict[str, str] = dict(composed.get("video_urls") or {})
     video_keys: dict[str, str] = dict(composed.get("video_keys") or {})
-    for pid, local in videos_in.items():
-        if not local or not Path(local).is_file():
-            if local:
-                videos_out[pid] = local
+    for pid, local in list(videos_in.items()):
+        if not local:
             continue
-        name = Path(local).name
+        local_path = Path(local)
+        if not local_path.is_file():
+            # Already a URL from a prior upload
+            if _is_http_url(str(local)):
+                video_urls[pid] = str(local)
+            continue
+        name = local_path.name
         relative = f"pages/{name}" if is_pack else name
         key = _object_key(post, ver, relative)
         try:
-            url = storage.upload(Path(local), key)
+            url = storage.upload(local_path, key)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=502, detail=f"Video upload failed: {exc}"
             ) from exc
-        videos_out[pid] = local
         video_urls[pid] = url
         video_keys[pid] = key
+        temps_to_delete.append(local_path)
 
-    if videos_out or video_urls:
-        composed["videos"] = videos_out or videos_in
+    if video_urls:
+        composed["videos"] = dict(video_urls)
         composed["video_urls"] = video_urls
         composed["video_keys"] = video_keys
-        first_url = next(iter(video_urls.values()), None)
-        composed["video_path"] = first_url or next(
-            iter((videos_out or videos_in).values()), None
-        )
-        composed["page_video_paths"] = [
-            video_urls.get(pid) or path
-            for pid, path in (videos_out or videos_in).items()
-        ]
+        composed["video_path"] = next(iter(video_urls.values()), None)
+        composed["page_video_paths"] = list(video_urls.values())
+
+    if cleanup_locals:
+        for path in temps_to_delete:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     return composed
 
@@ -243,8 +283,8 @@ async def create_draft_post(
             raise HTTPException(status_code=404, detail=f"Brand '{brand_id}' not found")
         profile = brand_to_profile(brand_row, settings)
 
-    brand_name, tagline, description, logo_url = _brand_fields(profile)
-    run_id, run_dir = _new_run_dir(settings)
+    brand_name, tagline, description, logo_url = _brand_fields(profile, brand_row)
+    run_id = _new_run_id()
 
     try:
         page = await scrape_page(url)
@@ -362,7 +402,7 @@ async def create_draft_post(
         pack_id=pack_id,
         template_id=template_id,
         variant_id=variant_id,
-        asset_dir=str(run_dir),
+        asset_dir="",
         content=content,
         images={},
         composed={},
@@ -429,8 +469,7 @@ async def generate_post_images(
     if not settings.fal_key:
         raise HTTPException(status_code=500, detail="FAL_KEY is not set")
 
-    run_dir = Path(post.asset_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
+    storage = get_storage(settings)
     existing = dict(post.images or {})
     by_page: dict[str, Any] = dict(existing.get("by_page") or {})
     slots = _page_image_slots(post, settings)
@@ -441,7 +480,7 @@ async def generate_post_images(
         page_id = slot["page_id"]
         if page_filter is not None and page_id not in page_filter:
             continue
-        if not regenerate and page_id in by_page and Path(by_page[page_id]).is_file():
+        if not regenerate and page_id in by_page and _image_ref_has_asset(by_page[page_id]):
             continue
         prompt = slot["prompt"]
         if not prompt:
@@ -449,22 +488,23 @@ async def generate_post_images(
                 status_code=502,
                 detail=f"Page '{page_id}' needs an image but no visual_prompt is set",
             )
-        dest = run_dir / slot["filename"]
         try:
-            await generate_recraft_image(prompt=prompt, dest=dest, settings=settings)
+            data = await generate_recraft_image_bytes(prompt=prompt, settings=settings)
+            key = _source_object_key(post, slot["filename"])
+            url = storage.upload_bytes(data, key, content_type="image/png")
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=502,
                 detail=f"Recraft generation failed for {page_id}: {exc}",
             ) from exc
-        by_page[page_id] = str(dest)
+        by_page[page_id] = {"url": url, "key": key}
         generated.append(page_id)
 
-    paths = list(by_page.values())
+    urls = [u for u in (_image_ref_url(v) for v in by_page.values()) if u]
     post.images = {
         "by_page": by_page,
-        "paths": paths,
-        "image_path": paths[0] if paths else None,
+        "paths": urls,
+        "image_path": urls[0] if urls else None,
     }
     if generated or regenerate:
         post.status = "imaged" if by_page else post.status
@@ -489,7 +529,7 @@ async def compose_post(
     settings: Settings,
     record_revision: bool = True,
 ) -> Post:
-    """Fill template/pack HTML for preview (no Playwright PNG)."""
+    """Fill template/pack HTML for preview (no Playwright PNG, no disk writes)."""
     content = post.content or {}
     needed = int(content.get("pack_images_needed") or 0)
     has_images = bool((post.images or {}).get("by_page"))
@@ -503,8 +543,6 @@ async def compose_post(
             record_revision=False,
         )
 
-    run_dir = Path(post.asset_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
     variant_css = _load_post_variant_css(db, post)
 
     brand_name = content.get("brand") or ""
@@ -523,15 +561,12 @@ async def compose_post(
         filled: str,
         prior: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        html_path = run_dir / html_name
-        html_path.write_text(filled, encoding="utf-8")
         entry: dict[str, Any] = {
             "index": index,
             "page_id": page_id,
             "html": html_name,
             "html_source": filled,
         }
-        # Drop stale PNG fields after re-fill
         if prior:
             for key in ("videos",):
                 if key in prior:
@@ -570,8 +605,8 @@ async def compose_post(
                     fields["series"] = tagline.upper()
 
                 if page_def.images > 0:
-                    img = by_page.get(page_def.id)
-                    page_images = [Path(img)] if img else []
+                    img_url = _image_ref_url(by_page.get(page_def.id))
+                    page_images = [img_url] if img_url else []
                 else:
                     page_images = []
 
@@ -580,7 +615,7 @@ async def compose_post(
                     page=page_def,
                     fields=fields,
                     settings=settings,
-                    image_paths=page_images,
+                    image_urls=page_images,
                     variant_css=variant_css,
                 )
                 html_name = f"filled_{index:02d}_{page_def.id}.html"
@@ -603,8 +638,12 @@ async def compose_post(
                 "final_path": None,
             }
         else:
-            image_path = by_page.get("main") or (post.images or {}).get("image_path")
-            if not image_path:
+            image_url = _image_ref_url(by_page.get("main")) or (
+                str((post.images or {}).get("image_path") or "")
+                if _is_http_url(str((post.images or {}).get("image_path") or ""))
+                else None
+            )
+            if not image_url:
                 raise HTTPException(
                     status_code=400,
                     detail="No source image; call POST /posts/{id}/images first "
@@ -613,7 +652,7 @@ async def compose_post(
             filled = render_filled_html(
                 template_id=post.template_id or "default",
                 caption=content.get("overlay_text") or "",
-                image_path=Path(image_path),
+                image_url=image_url,
                 cta_link=post.url,
                 settings=settings,
                 css_vars=variant_css,
@@ -641,7 +680,6 @@ async def compose_post(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Compose failed: {exc}") from exc
 
-    # Clear prior render outputs at top level
     composed = dict(post.composed or {})
     for stale in ("videos", "video_path", "page_video_paths", "video_urls", "video_keys"):
         composed.pop(stale, None)
@@ -649,36 +687,13 @@ async def compose_post(
     post.status = "preview"
     if record_revision:
         _add_revision(db, post, "preview")
-    meta_path = run_dir / "meta.json"
-    meta = {
-        "post_id": str(post.id),
-        "run_id": (post.meta or {}).get("run_id"),
-        "status": post.status,
-        "format": post.format,
-        "pack_id": post.pack_id,
-        "template_id": post.template_id,
-        "composed": {
-            "pages": [
-                {
-                    "index": p.get("index"),
-                    "page_id": p.get("page_id"),
-                    "html": p.get("html"),
-                    "html_source_len": len(p.get("html_source") or ""),
-                }
-                for p in (post.composed or {}).get("pages") or []
-            ]
-        },
-        "images": post.images,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     db.commit()
     db.refresh(post)
     return post
 
 
 def _page_has_png(page: dict[str, Any]) -> bool:
-    return bool(page.get("url") or page.get("path"))
+    return bool(page.get("url"))
 
 
 def _post_has_pngs(post: Post) -> bool:
@@ -694,7 +709,7 @@ async def render_post(
     settings: Settings,
     record_revision: bool = True,
 ) -> Post:
-    """Playwright PNG from filled HTML + object-storage upload."""
+    """Playwright PNG from filled HTML + object-storage upload (ephemeral temp only)."""
     composed_pages = list((post.composed or {}).get("pages") or [])
     if not composed_pages:
         raise HTTPException(
@@ -702,75 +717,62 @@ async def render_post(
             detail="Fill HTML first via POST /posts/{id}/compose",
         )
 
-    run_dir = Path(post.asset_dir)
-    pages_dir = run_dir / "pages"
-    pages_dir.mkdir(parents=True, exist_ok=True)
     fmt: SocialFormat = post.format  # type: ignore[assignment]
     page_filter = set(pages) if pages else None
     content = post.content or {}
     is_pack = content.get("mode") == "pack" and bool(post.pack_id)
 
     try:
-        updated: list[dict[str, Any]] = []
-        for entry in composed_pages:
-            item = dict(entry)
-            pid = item.get("page_id") or "main"
-            if page_filter is not None and pid not in page_filter:
-                updated.append(item)
-                continue
+        with tempfile.TemporaryDirectory(prefix="postner_render_") as tmp:
+            tmp_dir = Path(tmp)
+            updated: list[dict[str, Any]] = []
+            for entry in composed_pages:
+                item = dict(entry)
+                pid = item.get("page_id") or "main"
+                if page_filter is not None and pid not in page_filter:
+                    updated.append(item)
+                    continue
 
-            html_source = item.get("html_source")
-            html_name = item.get("html") or (
-                f"filled_{int(item.get('index') or 1):02d}_{pid}.html"
-                if is_pack
-                else "filled.html"
-            )
-            if not html_source:
-                html_path = run_dir / html_name
-                if html_path.is_file():
-                    html_source = html_path.read_text(encoding="utf-8")
-                    item["html_source"] = html_source
-                else:
+                html_source = item.get("html_source")
+                if not html_source:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Missing html_source for page '{pid}'; recompose first",
                     )
-            else:
-                # Keep disk in sync for Playwright file:// loads of nested assets
-                (run_dir / html_name).write_text(html_source, encoding="utf-8")
 
-            index = int(item.get("index") or 1)
-            if is_pack:
-                dest = pages_dir / f"{index:02d}_{pid}.png"
-            else:
-                dest = run_dir / "final.png"
+                index = int(item.get("index") or 1)
+                html_name = item.get("html") or (
+                    f"filled_{index:02d}_{pid}.html" if is_pack else "filled.html"
+                )
+                if is_pack:
+                    dest = tmp_dir / f"{index:02d}_{pid}.png"
+                else:
+                    dest = tmp_dir / "final.png"
 
-            await screenshot_html(
-                html=html_source,
-                dest=dest,
-                format_name=fmt,
-                work_dir=run_dir,
-                html_name=html_name,
-            )
-            item["path"] = str(dest)
-            item["html"] = html_name
-            # Drop old CDN url/key until upload refreshes them
-            item.pop("url", None)
-            item.pop("key", None)
-            updated.append(item)
+                await screenshot_html(
+                    html=html_source,
+                    dest=dest,
+                    format_name=fmt,
+                )
+                item["path"] = str(dest)
+                item["html"] = html_name
+                item.pop("url", None)
+                item.pop("key", None)
+                updated.append(item)
 
-        post.composed = {
-            **dict(post.composed or {}),
-            "pages": updated,
-            "page_paths": [p.get("path") for p in updated if p.get("path")],
-            "final_path": next((p.get("path") for p in updated if p.get("path")), None),
-        }
+            post.composed = {
+                **dict(post.composed or {}),
+                "pages": updated,
+                "page_paths": [],
+                "final_path": None,
+            }
+            # Upload while temps still exist
+            post.composed = _upload_composed_assets(db, post, settings)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Render failed: {exc}") from exc
 
-    post.composed = _upload_composed_assets(db, post, settings)
     post.status = "rendered"
     if record_revision:
         _add_revision(db, post, "render")
@@ -796,9 +798,6 @@ async def animate_post(
             detail="Render PNGs first via POST /posts/{id}/render or approve",
         )
 
-    run_dir = Path(post.asset_dir)
-    pages_dir = run_dir / "pages"
-    pages_dir.mkdir(parents=True, exist_ok=True)
     fmt: SocialFormat = post.format  # type: ignore[assignment]
     content = post.content or {}
     target_ids: set[str] | None = None
@@ -807,50 +806,49 @@ async def animate_post(
     elif pages:
         target_ids = set(pages)
 
-    videos: dict[str, str] = dict((post.composed or {}).get("videos") or {})
+    videos: dict[str, str] = dict(
+        (post.composed or {}).get("video_urls")
+        or (post.composed or {}).get("videos")
+        or {}
+    )
     video_error: str | None = None
 
     composed_pages = list((post.composed or {}).get("pages") or [])
-    for entry in composed_pages:
-        pid = entry["page_id"]
-        if target_ids is not None and pid not in target_ids:
-            continue
-        html_source = entry.get("html_source")
-        html_name = entry.get("html") or f"filled_{entry.get('index', 1):02d}_{pid}.html"
-        if html_source:
-            html = html_source
-            (run_dir / html_name).write_text(html, encoding="utf-8")
-        else:
-            html_path = run_dir / html_name
-            if not html_path.is_file():
-                continue
-            html = html_path.read_text(encoding="utf-8")
-        if content.get("mode") == "pack":
-            dest = pages_dir / f"{entry['index']:02d}_{pid}.mp4"
-        else:
-            dest = run_dir / "final.mp4"
-        try:
-            await render_html_video(
-                html=html,
-                dest=dest,
-                format_name=fmt,
-                work_dir=run_dir,
-                motion_preset=motion_preset,
-                html_name=f"filled_motion_{pid}.html",
-            )
-            videos[pid] = str(dest)
-        except Exception as exc:  # noqa: BLE001
-            video_error = str(exc)
-            break
+    try:
+        with tempfile.TemporaryDirectory(prefix="postner_animate_") as tmp:
+            tmp_dir = Path(tmp)
+            for entry in composed_pages:
+                pid = entry["page_id"]
+                if target_ids is not None and pid not in target_ids:
+                    continue
+                html = entry.get("html_source")
+                if not html:
+                    continue
+                if content.get("mode") == "pack":
+                    dest = tmp_dir / f"{entry['index']:02d}_{pid}.mp4"
+                else:
+                    dest = tmp_dir / "final.mp4"
+                try:
+                    await render_html_video(
+                        html=html,
+                        dest=dest,
+                        format_name=fmt,
+                        motion_preset=motion_preset,
+                    )
+                    videos[pid] = str(dest)
+                except Exception as exc:  # noqa: BLE001
+                    video_error = str(exc)
+                    break
 
-    composed = dict(post.composed or {})
-    composed["videos"] = videos
-    composed["video_path"] = next(iter(videos.values()), None)
-    composed["page_video_paths"] = list(videos.values())
-    if video_error:
-        composed["video_error"] = video_error
-    post.composed = composed
-    post.composed = _upload_composed_assets(db, post, settings)
+            composed = dict(post.composed or {})
+            composed["videos"] = videos
+            if video_error:
+                composed["video_error"] = video_error
+            post.composed = composed
+            post.composed = _upload_composed_assets(db, post, settings)
+    except HTTPException:
+        raise
+
     post.status = "animated" if videos and not video_error else post.status
     _add_revision(
         db,

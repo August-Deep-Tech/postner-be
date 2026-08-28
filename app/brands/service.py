@@ -15,8 +15,9 @@ from app.brands.store import (
 )
 from typing import get_args
 
-from app.config import Settings, SocialFormat
+from app.config import Settings, SocialFormat, get_settings
 from app.db.models import Brand
+from app.storage import get_storage
 
 _VALID_FORMATS = set(get_args(SocialFormat))
 
@@ -62,7 +63,7 @@ def brand_formats(brand: Brand) -> list[str]:
 
 
 def brand_to_profile(brand: Brand, settings: Settings) -> BrandProfile:
-    """Map DB brand to file-style BrandProfile (logo may live under brands/<slug>/)."""
+    """Map DB brand to file-style BrandProfile (seed folders optional)."""
     root = settings.brands_dir / brand.slug
     if not root.is_dir():
         root = None
@@ -105,6 +106,51 @@ def get_tenant_brand(
     )
 
 
+def _is_http_url(value: str) -> bool:
+    v = value.strip().lower()
+    return v.startswith("http://") or v.startswith("https://")
+
+
+def _resolve_logo_url(
+    *,
+    tenant_id: uuid.UUID,
+    brand_id: uuid.UUID,
+    brand_slug: str,
+    logo: str | None,
+    settings: Settings,
+) -> str | None:
+    """Persist brand logos as public object URLs only."""
+    if not logo or not str(logo).strip():
+        return None
+    raw = str(logo).strip()
+    if _is_http_url(raw):
+        return raw
+
+    # Relative filename under brands/<slug>/ (seed / legacy) → upload once
+    name = Path(raw).name
+    local = settings.brands_dir / brand_slug / name
+    if not local.is_file():
+        # Allow absolute path only if it resolves under brands_dir
+        candidate = Path(raw)
+        if candidate.is_file():
+            try:
+                candidate.resolve().relative_to(settings.brands_dir.resolve())
+                local = candidate
+            except ValueError as exc:
+                raise ValueError(
+                    "logo must be an http(s) URL or a file under brands/<slug>/"
+                ) from exc
+        else:
+            raise ValueError(
+                "logo must be an http(s) public URL (or an existing brands/<slug>/ file to upload)"
+            )
+
+    suffix = local.suffix.lower() or ".png"
+    key = f"tenants/{tenant_id}/brands/{brand_id}/logo{suffix}"
+    storage = get_storage(settings)
+    return storage.upload(local, key)
+
+
 def create_brand(
     db: Session,
     *,
@@ -118,6 +164,7 @@ def create_brand(
     formats: list[str] | str | None = None,
     settings: Settings | None = None,
 ) -> Brand:
+    settings = settings or get_settings()
     bid = normalize_brand_id(slug or name)
     existing = db.scalar(
         select(Brand).where(Brand.tenant_id == tenant_id, Brand.slug == bid)
@@ -131,16 +178,24 @@ def create_brand(
         tagline=tagline.strip(),
         description=description.strip(),
         website=(website or None),
-        logo=Path(logo).name if logo else None,
+        logo=None,
         formats=_normalize_formats(formats),
     )
     db.add(brand)
+    db.flush()
+    if logo:
+        brand.logo = _resolve_logo_url(
+            tenant_id=tenant_id,
+            brand_id=brand.id,
+            brand_slug=brand.slug,
+            logo=logo,
+            settings=settings,
+        )
     db.commit()
     db.refresh(brand)
-    if settings is not None:
-        from app.brands.variants import seed_brand_variants_from_disk
+    from app.brands.variants import seed_brand_variants_from_disk
 
-        seed_brand_variants_from_disk(db, brand, settings)
+    seed_brand_variants_from_disk(db, brand, settings)
     return brand
 
 
@@ -154,7 +209,9 @@ def update_brand(
     website: str | None = None,
     logo: str | None = None,
     formats: list[str] | str | None = None,
+    settings: Settings | None = None,
 ) -> Brand:
+    settings = settings or get_settings()
     if name is not None:
         brand.name = name.strip() or brand.name
     if tagline is not None:
@@ -164,7 +221,13 @@ def update_brand(
     if website is not None:
         brand.website = website.strip() or None
     if logo is not None:
-        brand.logo = Path(logo).name if logo else None
+        brand.logo = _resolve_logo_url(
+            tenant_id=brand.tenant_id,
+            brand_id=brand.id,
+            brand_slug=brand.slug,
+            logo=logo,
+            settings=settings,
+        )
     if formats is not None:
         brand.formats = _normalize_formats(formats)
     db.commit()

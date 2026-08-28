@@ -63,19 +63,20 @@ class Settings(BaseSettings):
     # Comma-separated FE origins; empty → allow all (dev)
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
-    # Object storage (S3-compatible: R2, AWS S3, MinIO, …). Default local = no upload.
-    storage_backend: str = Field(default="local", alias="STORAGE_BACKEND")
+    # Object storage only (MinIO locally, Cloudflare R2 / AWS S3 in prod).
+    storage_backend: str = Field(default="s3", alias="STORAGE_BACKEND")
     storage_bucket: str = Field(default="", alias="STORAGE_BUCKET")
     storage_access_key_id: str = Field(default="", alias="STORAGE_ACCESS_KEY_ID")
     storage_secret_access_key: str = Field(default="", alias="STORAGE_SECRET_ACCESS_KEY")
     storage_endpoint_url: str = Field(default="", alias="STORAGE_ENDPOINT_URL")
     storage_region: str = Field(default="auto", alias="STORAGE_REGION")
     storage_public_base_url: str = Field(default="", alias="STORAGE_PUBLIC_BASE_URL")
+    # "path" for MinIO; "auto" for AWS/R2
+    storage_addressing_style: str = Field(default="auto", alias="STORAGE_ADDRESSING_STYLE")
 
     templates_dir: Path = REPO_ROOT / "templates"
     variants_dir: Path = REPO_ROOT / "variants"
     brands_dir: Path = REPO_ROOT / "brands"
-    output_dir: Path = REPO_ROOT / "output"
 
     @model_validator(mode="after")
     def _merge_model_aliases(self) -> Settings:

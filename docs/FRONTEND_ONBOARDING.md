@@ -134,9 +134,10 @@ POST /posts/{post_id}/compose
 ```
 
 - `ensure_images: true` gap-fills Recraft photos if needed, then fills HTML.
-- Review with `composed.pages[].html_content` (browser-ready data URIs) via `iframe.srcdoc`, or `GET /posts/{id}/pages/{page_id}/html`.
-- `composed.pages[].url` / `path` / `key` are **absent** until render.
+- Review with `composed.pages[].html_content` via `iframe.srcdoc` (images are http(s) from MinIO/CDN — not `file://`).
+- `composed.pages[].url` / `key` are **absent** until render.
 - Optional early PNG (without approving): `POST /posts/{id}/render`.
+- Legacy posts with `file://` assets need recompose after regenerating images.
 
 ### Step 7 — Review UI (HTML preview)
 
@@ -260,28 +261,28 @@ Content-Type: application/json
   "page_id": "cover",
   "html": "filled_01_cover.html",
   "html_source": "<!DOCTYPE html>...",
-  "html_content": "<!DOCTYPE html>...data URIs..."
+  "html_content": "<!DOCTYPE html>..."
 }
 ```
 
-- **`html_content`** — response-only (not stored); use for `iframe.srcdoc`.
-- **`html_source`** — tracked in DB (revision/undo); keeps `file://` for Playwright.
+- **`html_content`** — response-only copy of filled HTML for `iframe.srcdoc` (img src = MinIO/CDN URLs).
+- **`html_source`** — tracked in DB (revision/undo).
 - No `url` until render/approve.
+- Recraft sources live at `images.by_page.<id>.url` (object storage).
 
 ### After render or approve
 
 ```json
 {
   "page_id": "cover",
-  "path": "/app/output/.../01_cover.png",
   "url": "https://cdn.example.com/tenants/.../v3/pages/01_cover.png",
   "key": "tenants/.../v3/pages/01_cover.png"
 }
 ```
 
 - Prefer **`url`** for download / `<img>`.
-- Storage is env-swappable (`STORAGE_BACKEND=local|s3`).
-- Recraft intermediates are **not** uploaded — only final PNG/MP4.
+- Storage is S3-compatible only (`STORAGE_BACKEND=s3`); local MinIO or cloud R2/S3.
+- Recraft sources and finals both live in object storage.
 
 ---
 

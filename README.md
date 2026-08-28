@@ -6,7 +6,7 @@ Multi-tenant FastAPI backend: register → brands → draft post → Recraft ima
 
 - **Auth:** email/password + JWT
 - **DB:** Postgres (Docker) — tenants, brands, **brand variants**, posts, revisions
-- **Assets:** Docker volume `/app/output`; filled HTML tracked in `posts.composed`; PNG/MP4 → object storage when `STORAGE_BACKEND=s3`
+- **Assets:** **object storage only** (MinIO in Docker, R2/S3 in prod). Filled HTML in `posts.composed`; Recraft / logos / PNG / MP4 as public URLs.
 - **Packs/templates:** on disk (shared catalog). Starter variant JSON under `variants/` is **seeded into each brand** on create.
 
 ## Quick start (Docker)
@@ -18,9 +18,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
-API: http://localhost:8001/docs
+API: http://localhost:8001/docs  
+MinIO API: http://localhost:9000 (console :9001) — bucket `postner`, public-read.
 
-Compose brings up **api** + **db** (Postgres on host port **5434** → container 5432, to avoid clashing with other local Postgres). Named volumes: `pgdata`, `output`.
+Compose brings up **api** + **db** + **minio** (Postgres host port **5434**). Named volumes: `pgdata`, `minio_data`.
 
 ## Local (without Docker API)
 
@@ -31,11 +32,12 @@ python -m venv .venv
 pip install -r requirements.txt
 playwright install chromium
 
-# Start Postgres (e.g. via compose)
-docker compose up db -d
+# Start Postgres + MinIO
+docker compose up db minio minio-init -d
 
 cp .env.example .env
 # DATABASE_URL=postgresql+psycopg://postner:postner@localhost:5434/postner
+# Point STORAGE_* at MinIO (see .env.example); STORAGE_ENDPOINT_URL=http://localhost:9000
 
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -97,16 +99,15 @@ Variant generation is biased by: pack/template HTML + required CSS keys + brand 
 
 See [`templates/README.md`](templates/README.md).
 
-### Still on local disk
+### Catalog on disk (not runtime media)
 
 | Path | What |
 |---|---|
-| `templates/` | HTML templates + packs (shared catalog; proposed packs also write here) |
+| `templates/` | HTML templates + packs (shared catalog) |
 | `variants/` | Starter JSON only (seed source for new brands) |
-| `brands/<slug>/` | Optional logo files referenced by DB brands |
-| `output/<run>/` | Recraft images, filled HTML, local PNG/MP4 workspace (`Post.asset_dir`) |
+| `brands/<slug>/` | Optional seed logo files — uploaded to object storage on brand create |
 
-Composed finals upload via `ObjectStorage` when `STORAGE_BACKEND=s3`; otherwise URLs stay local paths.
+Runtime media (Recraft, logos, composed PNG/MP4) is **only** in object storage. `STORAGE_BACKEND=local` is removed.
 
 ## Env
 
@@ -116,3 +117,7 @@ Composed finals upload via `ObjectStorage` when `STORAGE_BACKEND=s3`; otherwise 
 | `JWT_SECRET` | Sign access tokens |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM |
 | `FAL_KEY` | Recraft |
+| `STORAGE_BACKEND` | Must be `s3` |
+| `STORAGE_BUCKET` / keys / `STORAGE_ENDPOINT_URL` | S3-compatible store |
+| `STORAGE_PUBLIC_BASE_URL` | Browser-reachable base (MinIO: `http://localhost:9000/postner`) |
+| `STORAGE_ADDRESSING_STYLE` | `path` for MinIO; `auto` for AWS/R2 |

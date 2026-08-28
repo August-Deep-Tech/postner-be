@@ -12,15 +12,9 @@ async def screenshot_html(
     html: str,
     dest: Path,
     format_name: SocialFormat,
-    work_dir: Path,
-    html_name: str = "filled.html",
 ) -> Path:
-    """Write HTML to a temp file and screenshot at the social canvas size."""
+    """Screenshot HTML at the social canvas size (assets must be http(s) URLs)."""
     width, height = get_size(format_name)
-    work_dir.mkdir(parents=True, exist_ok=True)
-    html_path = work_dir / html_name
-    html_path.write_text(html, encoding="utf-8")
-
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     async with async_playwright() as p:
@@ -30,8 +24,7 @@ async def screenshot_html(
                 viewport={"width": width, "height": height},
                 device_scale_factor=1,
             )
-            await page.goto(html_path.resolve().as_uri(), wait_until="networkidle")
-            # Give Google Fonts a moment if linked
+            await page.set_content(html, wait_until="networkidle")
             await page.wait_for_timeout(500)
             await page.evaluate("() => document.fonts.ready")
 
