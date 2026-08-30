@@ -27,11 +27,11 @@ Drop HTML files in this folder (e.g. `basic.html`). The API loads them by
 | Placeholder | Purpose |
 |---|---|
 | `{{caption}}` | Short overlay text (`overlay_text` from generation) |
-| `{{image_url}}` | Absolute `file://` URL to the Recraft image |
+| `{{image_url}}` | Absolute http(s) URL to the Recraft image (object storage) |
 | `{{cta_link}}` | Optional — source page URL |
 | `{{brand}}` | Brand profile name (`brand_id`) |
 | `{{tagline}}` | Brand tagline |
-| `{{logo_url}}` | Brand logo `file://` URL (empty if none) |
+| `{{logo_url}}` | Brand logo http(s) URL (empty if none) |
 
 ### CSS variables (swappable via variants)
 

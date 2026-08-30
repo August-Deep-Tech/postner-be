@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from app.config import Settings
 
@@ -78,14 +76,6 @@ def load_template_html(template_id: str, settings: Settings) -> str:
     return resolve_template_path(template_id, settings).read_text(encoding="utf-8")
 
 
-def path_to_file_url(path: Path) -> str:
-    resolved = path.resolve().as_posix()
-    # Windows paths need an extra slash: file:///C:/...
-    if re.match(r"^[A-Za-z]:/", resolved):
-        return "file:///" + quote(resolved, safe="/:")
-    return "file://" + quote(resolved, safe="/")
-
-
 _ROOT_BLOCK_RE = re.compile(
     r"(:root\s*\{)(.*?)(\})",
     re.DOTALL | re.IGNORECASE,
@@ -156,7 +146,7 @@ def render_filled_html(
     *,
     template_id: str,
     caption: str,
-    image_path: Path,
+    image_url: str,
     cta_link: str,
     settings: Settings,
     css_vars: dict[str, str] | None = None,
@@ -171,7 +161,7 @@ def render_filled_html(
     return fill_template(
         html,
         caption=caption,
-        image_url=path_to_file_url(image_path),
+        image_url=image_url,
         cta_link=cta_link,
         brand=brand,
         tagline=tagline,

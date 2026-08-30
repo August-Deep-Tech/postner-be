@@ -86,7 +86,7 @@ class Brand(Base):
     tagline: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     website: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    logo: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    logo: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     # Enabled social canvases for this brand (ordered; first is default)
     formats: Mapped[list[Any]] = mapped_column(JsonType, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
