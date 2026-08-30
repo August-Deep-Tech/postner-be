@@ -1,16 +1,19 @@
-# HTML pipeline — security fixes
+# Backend fixes — HTML preview and render pipeline
 
-**Verified against `c3d7bbd` (2026-08-30).**
+**Verified against `c3d7bbd` (2026-08-30).** Every line reference below was
+checked against that tree.
 
-Two commits reshaped this area since the review was written. `afaff00` split
-`compose_post` (HTML fill) from `render_post` (Playwright + upload), and
-`c3d7bbd` moved every runtime asset into object storage, deleting the `file://`
-scheme from the codebase entirely.
+Two commits reshaped this area recently. `afaff00` split `compose_post` (HTML
+fill) from `render_post` (Playwright + upload), and `c3d7bbd` moved every
+runtime asset into object storage, deleting the `file://` scheme from the
+codebase. Findings that those commits changed or resolved are marked in place.
 
-Neither touched `fill_placeholders` or `apply_color_variant`. Findings 1, 2, 3
-and 5 below are unchanged from the original review and confirmed still present
-at the line numbers given. Findings 4 and 6 were partly overtaken by `c3d7bbd`
-and have been rewritten; what remains of each is described in place.
+Two kinds of issue are collected here:
+
+- **[A] Correctness** — downloaded PNGs come out with no photos. Reproducible
+  today on the local stack.
+- **[B] Security** — six findings in the template filler and the render path.
+  Finding B1 is the root cause and one change closes it.
 
 None of these are frontend fixes. The frontend renders preview markup in a
 `sandbox=""` iframe under a restrictive CSP, but that is defence in depth — it
@@ -18,20 +21,86 @@ does nothing for the Playwright sink, which runs inside this service.
 
 ---
 
-## Findings
+# Part A — Rendered PNGs are missing their photos
 
-| # | Finding | File | Severity |
-|---|---|---|---|
-| 1 | Placeholder substitution does no HTML escaping | `app/templates/engine.py:17` | **High** |
-| 2 | Variant CSS values written raw into `:root{}` | `app/templates/engine.py:102` | **High** |
-| 3 | HTML endpoint serves `text/html` with no CSP | `app/posts/routes.py:207` | **High** (with the FE proxy) |
-| 4 | Playwright renders untrusted markup with JS on, no egress limits | `app/render/screenshot.py:25` | Medium (was High) |
-| 5 | `RewriteRequest.text` accepts arbitrary keys/values | `app/posts/routes.py:69` | Medium |
-| 6 | `html_source` duplicated into every response, including the list | `app/posts/preview.py:14`, `routes.py:140` | Low (was Medium) |
+**Severity: High (broken output).** The preview shows the photos; the downloaded
+file does not. Same markup, two renderers, one URL that means different things
+in each.
+
+## Cause
+
+Image URLs are baked into the HTML from `STORAGE_PUBLIC_BASE_URL`, which is
+`http://localhost:9000/postner` on the local stack (`docker-compose.yml:59`).
+`S3CompatibleStorage.upload()` returns `f"{public_base_url}/{key}"`
+(`s3.py:76,90`) and `compose_post` substitutes that into the markup.
+
+`localhost:9000` then resolves differently depending on who loads the page:
+
+| Renderer | `localhost:9000` resolves to | Result |
+|---|---|---|
+| The user's browser (preview iframe) | the host, where MinIO publishes 9000 | images load |
+| Playwright, inside `backend-api-1` | the API container itself — no MinIO there | connection refused |
+
+Measured from inside the running container:
+
+```
+http://localhost:9000/postner/   -> UNREACHABLE: [Errno 111] Connection refused
+http://minio:9000/postner/       -> HTTP 200
+```
+
+`screenshot_html` then screenshots anyway. `wait_until="networkidle"` treats
+failed requests as settled and nothing raises, so the PNG comes out with correct
+text, colour and layout, and no photos.
+
+This is local-stack specific: in production with a real CDN
+(`https://cdn.example.com`) the container resolves that host fine and the bug
+disappears — which is exactly why it can ship unnoticed.
+
+## Fix
+
+The renderer needs an **internal** URL where the browser needs a **public** one.
+Options, best first:
+
+1. **Rewrite storage URLs to the internal endpoint just before rendering** —
+   swap `STORAGE_PUBLIC_BASE_URL`'s origin for `STORAGE_ENDPOINT_URL`'s
+   (`http://minio:9000`) in `render_post` / `screenshot_html`. Keeps
+   `html_source` browser-correct and touches only the render path.
+2. **Inline each image as a `data:` URI before screenshotting** — no network at
+   render time at all, and it composes well with disabling JS (see B4). Heavier,
+   but the most robust.
+3. A host alias so `localhost:9000` resolves inside the container. Fragile;
+   aliasing `localhost` is a poor idea.
+
+Whichever is chosen, **make it fail loudly**. A render that silently drops the
+photos is worse than one that errors:
+
+```python
+failures: list[str] = []
+page.on("requestfailed", lambda r: failures.append(r.url))
+# ... after screenshot
+if failures:
+    raise RuntimeError(f"Assets failed to load during render: {failures}")
+```
+
+Or assert every `<img>` came back with a non-zero `naturalWidth` before writing
+the PNG.
 
 ---
 
-## 1. Escape at substitution (root cause)
+# Part B — Security
+
+| # | Finding | File | Severity |
+|---|---|---|---|
+| B1 | Placeholder substitution does no HTML escaping | `app/templates/engine.py:17` | **High** |
+| B2 | Variant CSS values written raw into `:root{}` | `app/templates/engine.py:102` | **High** |
+| B3 | HTML endpoint serves `text/html` with no CSP | `app/posts/routes.py:207` | **High** (with the FE proxy) |
+| B4 | Playwright renders untrusted markup with JS on, no egress limits | `app/render/screenshot.py:25` | Medium (was High) |
+| B5 | `RewriteRequest.text` accepts arbitrary keys/values | `app/posts/routes.py:69` | Medium |
+| B6 | `html_source` duplicated into every response, including the list | `app/posts/preview.py:14`, `routes.py:140` | Low (was Medium) |
+
+---
+
+## B1. Escape at substitution (root cause)
 
 `fill_placeholders` is a raw regex `sub` into an HTML document:
 
@@ -57,8 +126,8 @@ Three taint sources reach it:
 - **`RewriteRequest.caption` / `text`** — authenticated, arbitrary strings,
   straight into `content` and then into placeholders.
 - **Brand `logo_url`** — lands inside `src="…"`, so `x" onerror="…` breaks the
-  attribute. Now stored as a public object URL up to 2048 chars (`006_brand_logo_url`),
-  so there is more room for a payload than before, not less.
+  attribute. Now stored as a public object URL up to 2048 chars
+  (`006_brand_logo_url`), so there is more room for a payload than before.
 
 ### Fix
 
@@ -110,13 +179,13 @@ No visual regression: every text placeholder sits in element content, where
 
 ---
 
-## 2. Validate variant CSS values
+## B2. Validate variant CSS values
 
 `apply_color_variant` (`engine.py:86-118`) writes values verbatim into a
 `:root{}` block at line 102, so a value of
 `red; } </style><script>…</script><style>` escapes the style element. These
 values are **LLM-generated** by `propose_and_save_variants` — the same
-prompt-injection source as finding 1.
+prompt-injection source as B1.
 
 ```python
 _CSS_KEY_RE = re.compile(r"^--[a-z0-9-]{1,64}$", re.IGNORECASE)
@@ -137,7 +206,7 @@ Drop any pair failing `_CSS_KEY_RE` / `_safe_css_value` before it reaches
 
 ---
 
-## 3. Send the HTML endpoint out sandboxed
+## B3. Send the HTML endpoint out sandboxed
 
 `GET /posts/{id}/pages/{page_id}/html` (`routes.py:188-207`) returns unescaped,
 partly attacker-influenced markup as `text/html` with no security headers.
@@ -176,15 +245,14 @@ return HTMLResponse(
 ```
 
 The bare `sandbox` directive makes the response behave as a sandboxed document —
-scripts never execute, even on direct navigation, and even if finding 1 is not
-yet fixed. `'unsafe-inline'` for styles is required by the templates' own
-`<style>` blocks.
+scripts never execute, even on direct navigation, and even if B1 is not yet
+fixed. `'unsafe-inline'` for styles is required by the templates' own `<style>`
+blocks.
 
 `img-src` must name the storage origin rather than a blanket `https:`: the local
-stack serves MinIO over plain **http** on `:9000`
-(`STORAGE_PUBLIC_BASE_URL=http://localhost:9000/postner`), which `https:` alone
-would block. The frontend hit exactly this and now reads the same setting to
-build its own policy.
+stack serves MinIO over plain **http** on `:9000`, which `https:` alone would
+block. The frontend hit exactly this and now reads the same setting to build its
+own policy — same root cause as Part A, in a different guise.
 
 Set `frame-ancestors` to the configured `CORS_ORIGINS` if the frontend ever
 frames this endpoint by URL; keep `'none'` while it uses `html_content` +
@@ -192,7 +260,7 @@ frames this endpoint by URL; keep `'none'` while it uses `html_content` +
 
 ---
 
-## 4. Harden the Playwright render
+## B4. Harden the Playwright render
 
 **Partly addressed by `c3d7bbd`.** `screenshot_html` now calls
 `page.set_content(html)` rather than `page.goto(file://…)`, and writes no markup
@@ -229,9 +297,10 @@ page = await context.new_page()
 await page.set_content(html, wait_until="networkidle")
 ```
 
-Note the allowlist must now include the storage host — page images are fetched
-over the network rather than read off disk, so an over-tight allowlist produces
-blank photos rather than an error.
+The allowlist must include the storage host — page images are fetched over the
+network rather than read off disk, so an over-tight allowlist reproduces Part A.
+Landing A and B4 together is sensible: both hinge on which host the renderer is
+allowed to reach.
 
 **`java_script_enabled=False` is the clean kill for the whole SSRF class**, but
 it still breaks one template: `templates/lifestyle_day.html:221` runs JS to clean
@@ -246,7 +315,7 @@ Complementary, outside the code: deny the render container egress to
 
 ---
 
-## 5. Reject markup at the API boundary
+## B5. Reject markup at the API boundary
 
 `RewriteRequest.text: dict[str, Any]` (`routes.py:69`) merges unbounded,
 unvalidated keys into `post.content`, which later reach placeholders. The API
@@ -270,14 +339,14 @@ renderer that executes it.
 
 ---
 
-## 6. Stop duplicating markup into every response
+## B6. Stop duplicating markup into every response
 
-**Rewritten.** The original finding was that `html_source` leaked
-`file:///app/runs/…` container paths. `c3d7bbd` removed the `file://` scheme
-entirely, so that disclosure is gone.
+**Rewritten since the original review.** The finding was that `html_source`
+leaked `file:///app/runs/…` container paths. `c3d7bbd` removed the `file://`
+scheme entirely, so that disclosure is gone.
 
 What replaced it is waste rather than exposure. `page_preview_html`
-(`preview.py:6-11`) now returns `html_source` unchanged, and
+(`preview.py:6-11`) returns `html_source` unchanged, and
 `enrich_composed_with_html` (`preview.py:14`) adds it as `html_content` **without
 removing `html_source`**. The two fields are byte-identical, so every response
 carries each page's full markup twice.
@@ -295,31 +364,37 @@ page of every post, up to the 50-post default limit.
 
 ---
 
-## Verification
+# Verification
 
 ```python
-# 1 — escaping
+# A — the render must not silently drop assets
+async def test_render_fails_when_images_unreachable(monkeypatch):
+    # point storage at an unroutable host, then render
+    with pytest.raises(HTTPException):
+        await render_post(db, post=post, settings=settings)
+
+# B1 — escaping
 def test_slide_title_is_escaped():
     html = fill_placeholders("<h1>{{title}}</h1>", {"title": "</h1><script>alert(1)</script>"})
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
 
-# 1 — url scheme allowlist
+# B1 — url scheme allowlist
 def test_non_http_image_url_dropped():
     html = fill_placeholders('<img src="{{image_url}}">', {"image_url": "javascript:alert(1)"})
     assert "javascript:" not in html
 
-# 2 — variant breakout
+# B2 — variant breakout
 def test_variant_css_breakout_rejected():
     out = apply_color_variant(":root{--bg:#fff;}", {"--bg": "red; } </style><script>x</script>"})
     assert "<script>" not in out
 
-# 5 — markup rejected at the boundary
+# B5 — markup rejected at the boundary
 def test_rewrite_rejects_markup():
     r = client.post(f"/posts/{pid}/rewrite", json={"caption": "<script>x</script>"})
     assert r.status_code == 422
 
-# 6 — markup returned once, and not on the list endpoint
+# B6 — markup returned once, and not on the list endpoint
 def test_response_does_not_duplicate_markup():
     page = client.get(f"/posts/{pid}").json()["composed"]["pages"][0]
     assert "html_content" in page and "html_source" not in page
@@ -327,14 +402,21 @@ def test_response_does_not_duplicate_markup():
 ```
 
 ```bash
-# 3 — headers on the preview endpoint
+# A — what the container can actually reach
+docker exec backend-api-1 python -c "
+import urllib.request
+for u in ['http://localhost:9000/postner/', 'http://minio:9000/postner/']:
+    try: print(u, urllib.request.urlopen(u, timeout=5).status)
+    except Exception as e: print(u, 'UNREACHABLE', e)"
+
+# B3 — headers on the preview endpoint
 curl -sI -H "Authorization: Bearer $TOKEN" \
   "$API/posts/$POST_ID/pages/main/html" | grep -i "content-security-policy\|x-content-type"
 ```
 
 ---
 
-## Cross-cutting, for the frontend
+# Cross-cutting, for the frontend
 
 Already shipped on the FE side, listed so both halves are visible:
 
@@ -343,6 +425,6 @@ Already shipped on the FE side, listed so both halves are visible:
   Verified against a live page: an injected `<script>` and an `onerror` handler
   both fail to execute, and the parent cannot read into the frame.
 - CSP and security headers are set, with `img-src` naming the storage origin
-  from `STORAGE_PUBLIC_BASE_URL` for the reason given in finding 3.
-- The BFF proxy refuses to forward non-JSON responses, so the endpoint in
-  finding 3 cannot be served from the app origin.
+  from `STORAGE_PUBLIC_BASE_URL` for the reason given in B3.
+- The BFF proxy refuses to forward non-JSON responses, so the endpoint in B3
+  cannot be served from the app origin.
