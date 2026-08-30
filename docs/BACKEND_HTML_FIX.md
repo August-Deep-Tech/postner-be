@@ -1,16 +1,20 @@
 # HTML pipeline — security fixes
 
-**Status as of `afaff00` (2026-08-28).** The preview split has shipped: `compose_post`
-fills HTML only, `render_post` does Playwright + upload, and `GET /posts/{id}/pages/{page_id}/html`
-serves filled markup to the browser.
+**Verified against `c3d7bbd` (2026-08-30).**
 
-`git diff --stat b90dcc0..afaff00 -- app/templates/ app/render/` is **empty**. The template
-filler and the screenshotter were not touched by that work, so the issues below are all
-still live — and the new flow adds a browser sink to markup that was previously only ever
-loaded by Playwright.
+Two commits reshaped this area since the review was written. `afaff00` split
+`compose_post` (HTML fill) from `render_post` (Playwright + upload), and
+`c3d7bbd` moved every runtime asset into object storage, deleting the `file://`
+scheme from the codebase entirely.
 
-None of these are frontend fixes. The frontend's `sandbox=""` iframe and CSP headers are
-defence in depth; they do nothing for the Playwright sink.
+Neither touched `fill_placeholders` or `apply_color_variant`. Findings 1, 2, 3
+and 5 below are unchanged from the original review and confirmed still present
+at the line numbers given. Findings 4 and 6 were partly overtaken by `c3d7bbd`
+and have been rewritten; what remains of each is described in place.
+
+None of these are frontend fixes. The frontend renders preview markup in a
+`sandbox=""` iframe under a restrictive CSP, but that is defence in depth — it
+does nothing for the Playwright sink, which runs inside this service.
 
 ---
 
@@ -18,12 +22,12 @@ defence in depth; they do nothing for the Playwright sink.
 
 | # | Finding | File | Severity |
 |---|---|---|---|
-| 1 | Placeholder substitution does no HTML escaping | `app/templates/engine.py:19` | **High** |
-| 2 | Variant CSS values written raw into `:root{}` | `app/templates/engine.py:93` | **High** |
-| 3 | New HTML endpoint serves `text/html` with no CSP | `app/posts/routes.py:188` | **High** (with the FE proxy) |
-| 4 | Playwright renders untrusted markup with JS on, no egress limits | `app/render/screenshot.py:31` | **High** |
-| 5 | `RewriteRequest.text` accepts arbitrary keys/values | `app/posts/routes.py:65` | Medium |
-| 6 | `html_source` returned to clients; `html_content` on the list endpoint | `app/posts/preview.py:95`, `routes.py:140` | Medium |
+| 1 | Placeholder substitution does no HTML escaping | `app/templates/engine.py:17` | **High** |
+| 2 | Variant CSS values written raw into `:root{}` | `app/templates/engine.py:102` | **High** |
+| 3 | HTML endpoint serves `text/html` with no CSP | `app/posts/routes.py:207` | **High** (with the FE proxy) |
+| 4 | Playwright renders untrusted markup with JS on, no egress limits | `app/render/screenshot.py:25` | Medium (was High) |
+| 5 | `RewriteRequest.text` accepts arbitrary keys/values | `app/posts/routes.py:69` | Medium |
+| 6 | `html_source` duplicated into every response, including the list | `app/posts/preview.py:14`, `routes.py:140` | Low (was Medium) |
 
 ---
 
@@ -47,12 +51,14 @@ The sinks are element **and** attribute context:
 
 Three taint sources reach it:
 
-- **LLM slide text derived from the scraped URL** (`generate_carousel` → `content.slides`
-  → `fields`, `service.py:537`). Unauthenticated: anyone who controls a page a user drafts
-  from can prompt-inject `<script>` into a slide title.
-- **`RewriteRequest.caption` / `text`** — authenticated, arbitrary strings, straight into
-  `content` and then into placeholders.
-- **Brand `logo_url`** — lands inside `src="…"`, so `x" onerror="…` breaks the attribute.
+- **LLM slide text derived from the scraped URL** (`generate_carousel` →
+  `content.slides` → `fields`). Unauthenticated: anyone who controls a page a
+  user drafts from can prompt-inject `<script>` into a slide title.
+- **`RewriteRequest.caption` / `text`** — authenticated, arbitrary strings,
+  straight into `content` and then into placeholders.
+- **Brand `logo_url`** — lands inside `src="…"`, so `x" onerror="…` breaks the
+  attribute. Now stored as a public object URL up to 2048 chars (`006_brand_logo_url`),
+  so there is more room for a payload than before, not less.
 
 ### Fix
 
@@ -61,23 +67,20 @@ import html as html_lib
 from urllib.parse import urlsplit
 
 _URL_KEYS = {"image_url", "logo_url", "cta_link"}
-_SAFE_URL_SCHEMES = {"https", "data", "file"}  # file: only for the internal Playwright load
+_SAFE_URL_SCHEMES = {"https", "http"}  # http for local MinIO; no file:, no data:
 
 
 def _safe_url(value: str) -> str:
     raw = (value or "").strip()
     if not raw:
         return ""
-    scheme = urlsplit(raw).scheme.lower()
-    if scheme not in _SAFE_URL_SCHEMES:
-        return ""
-    if scheme == "data" and not raw.lower().startswith("data:image/"):
+    if urlsplit(raw).scheme.lower() not in _SAFE_URL_SCHEMES:
         return ""
     return html_lib.escape(raw, quote=True)
 
 
 def fill_placeholders(html: str, values: dict[str, str]) -> str:
-    """Replace {{key}} tokens; unknown keys become empty string. Values are escaped."""
+    """Replace {{key}} tokens; unknown keys become empty string. Values escaped."""
 
     def _repl(match: re.Match[str]) -> str:
         key = match.group(1)
@@ -92,23 +95,28 @@ def fill_placeholders(html: str, values: dict[str, str]) -> str:
     return _PLACEHOLDER_RE.sub(_repl, html)
 ```
 
-The `image_` / `_url` prefix and suffix checks cover the dynamic keys `packs.py:159-161`
-generates (`image_2`, `image_url_2`, …).
+The `image_` / `_url` prefix and suffix checks cover the dynamic keys
+`packs.py:157-160` generates (`image_2`, `image_url_2`, …).
 
-**This one change closes both sinks** — the browser preview and the Playwright render —
-because both consume the same filled string.
+Since `c3d7bbd` every asset reference is an http(s) object-storage URL, so the
+scheme allowlist can be strict — `file:` and `data:` are no longer produced
+anywhere and should be rejected.
 
-No visual regression: every text placeholder sits in element content, where `&amp;` renders
-as `&`. The `white-space: pre-line` templates keep their newlines.
+**This one change closes both sinks** — the browser preview and the Playwright
+render — because both consume the same filled string.
+
+No visual regression: every text placeholder sits in element content, where
+`&amp;` renders as `&`. The `white-space: pre-line` templates keep their newlines.
 
 ---
 
 ## 2. Validate variant CSS values
 
-`apply_color_variant` (`engine.py:93-118`) writes values verbatim into a `:root{}` block, so
-a value of `red; } </style><script>…</script><style>` escapes the style element. These
-values are **LLM-generated** by `propose_and_save_variants` — the same prompt-injection
-source as finding 1.
+`apply_color_variant` (`engine.py:86-118`) writes values verbatim into a
+`:root{}` block at line 102, so a value of
+`red; } </style><script>…</script><style>` escapes the style element. These
+values are **LLM-generated** by `propose_and_save_variants` — the same
+prompt-injection source as finding 1.
 
 ```python
 _CSS_KEY_RE = re.compile(r"^--[a-z0-9-]{1,64}$", re.IGNORECASE)
@@ -118,35 +126,38 @@ _CSS_FORBIDDEN = ("url(", "expression", "@import", "javascript:", "</", "{", "}"
 
 def _safe_css_value(value: str) -> str | None:
     v = str(value).strip().rstrip(";").strip()
-    low = v.lower()
-    if any(token in low for token in _CSS_FORBIDDEN):
+    if any(token in v.lower() for token in _CSS_FORBIDDEN):
         return None
     return v if _CSS_VALUE_RE.match(v) else None
 ```
 
 Drop any pair failing `_CSS_KEY_RE` / `_safe_css_value` before it reaches
-`existing[key] = value`. The value pattern allows `(` and `)` for `rgb()` / `hsl()`; `url(`
-is caught by the forbidden-token list.
+`existing[key] = value`. The value pattern allows `(` and `)` for `rgb()` /
+`hsl()`; `url(` is caught by the forbidden-token list.
 
 ---
 
-## 3. Send the new HTML endpoint out sandboxed
+## 3. Send the HTML endpoint out sandboxed
 
-`GET /posts/{id}/pages/{page_id}/html` (`routes.py:188`) returns unescaped, partly
-attacker-influenced markup as `text/html` with no security headers.
+`GET /posts/{id}/pages/{page_id}/html` (`routes.py:188-207`) returns unescaped,
+partly attacker-influenced markup as `text/html` with no security headers.
 
-Direct navigation is mostly self-limiting — the route needs a Bearer token, which a browser
-navigation will not carry. The real path is the frontend proxy: `/api/proxy/[...path]`
-attaches the session token and **forwards the upstream content-type verbatim**, so this
-response becomes `text/html` on the *app* origin, where the `httpOnly` session cookie lives
-and `/api/proxy` is a credentialed gateway to the whole API. That is app-origin XSS, i.e.
-full tenant read/write without ever stealing the token.
+Direct navigation is mostly self-limiting — the route needs a Bearer token,
+which a browser navigation will not carry. The real path is the frontend proxy,
+which attaches the session token; if it forwarded the upstream content-type,
+this would become `text/html` on the *app* origin, where the httpOnly session
+cookie lives and the proxy is a credentialed gateway to the whole API. That is
+app-origin XSS: full tenant read/write without ever stealing the token.
+
+The frontend has since blocked that specific route by refusing to forward
+non-JSON responses, but this endpoint should not depend on one client's
+discipline to be safe.
 
 ```python
 _PREVIEW_CSP = (
     "sandbox; "
     "default-src 'none'; "
-    "img-src data:; "
+    f"img-src {settings.storage_public_base_url or 'https:'}; "
     "style-src 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src https://fonts.gstatic.com; "
     "frame-ancestors 'none'"
@@ -164,40 +175,48 @@ return HTMLResponse(
 )
 ```
 
-The bare `sandbox` directive makes the response behave as a sandboxed document — scripts
-never execute, even on direct navigation, and even if finding 1 is not yet fixed.
-`'unsafe-inline'` for styles is required by the templates' own `<style>` blocks.
+The bare `sandbox` directive makes the response behave as a sandboxed document —
+scripts never execute, even on direct navigation, and even if finding 1 is not
+yet fixed. `'unsafe-inline'` for styles is required by the templates' own
+`<style>` blocks.
 
-Set `frame-ancestors` to the configured `CORS_ORIGINS` if the frontend ever frames this
-endpoint by URL; keep `'none'` while it uses `html_content` + `srcdoc`, which is the plan.
+`img-src` must name the storage origin rather than a blanket `https:`: the local
+stack serves MinIO over plain **http** on `:9000`
+(`STORAGE_PUBLIC_BASE_URL=http://localhost:9000/postner`), which `https:` alone
+would block. The frontend hit exactly this and now reads the same setting to
+build its own policy.
+
+Set `frame-ancestors` to the configured `CORS_ORIGINS` if the frontend ever
+frames this endpoint by URL; keep `'none'` while it uses `html_content` +
+`srcdoc`, which is what it does today.
 
 ---
 
 ## 4. Harden the Playwright render
 
-`screenshot.py:31-35` is unchanged: full Chromium, **scripts enabled**, no request
-interception, no timeout beyond `wait_until="networkidle"`, running inside the API
-container. Injected script gets SSRF from inside the trust boundary — the cloud metadata
-endpoint, the API on localhost, Postgres/Redis on the compose network — plus arbitrary
-egress for exfiltration.
+**Partly addressed by `c3d7bbd`.** `screenshot_html` now calls
+`page.set_content(html)` rather than `page.goto(file://…)`, and writes no markup
+to disk. The render is no longer on a `file://` origin, which removes the local
+file-read surface and the temp-file trail. The original finding overstated what
+remains; the severity drops accordingly.
 
-`afaff00` did not reduce this exposure; it moved the trigger. `POST /render` and
-`add_feedback(decision="approved")` (`service.py:1133`) now both reach it.
+What is still open, at `screenshot.py:25-30`: the context runs with **scripts
+enabled**, no request interception, and no navigation timeout beyond
+`wait_until="networkidle"`. Injected script still gets egress from inside the
+trust boundary — the cloud metadata endpoint, the API on localhost, Postgres and
+MinIO on the compose network — and an unbounded window to use it.
 
 ```python
 _ALLOWED_HOSTS = {"fonts.googleapis.com", "fonts.gstatic.com"}
+# plus the storage host, parsed from settings.storage_public_base_url
 
 
 async def _guard(route, request):
-    url = request.url
-    if url.startswith(("file:", "data:", "blob:")):
+    host = urlsplit(request.url).hostname or ""
+    if host in _allowed_hosts(settings):
         await route.continue_()
-        return
-    host = urlsplit(url).hostname or ""
-    if host in _ALLOWED_HOSTS:
-        await route.continue_()
-        return
-    await route.abort()
+    else:
+        await route.abort()
 
 
 context = await browser.new_context(
@@ -207,26 +226,31 @@ context = await browser.new_context(
 )
 await context.route("**/*", _guard)
 page = await context.new_page()
-await page.goto(html_path.resolve().as_uri(), wait_until="networkidle", timeout=15_000)
+await page.set_content(html, wait_until="networkidle")
 ```
 
-**`java_script_enabled=False` is the clean kill for the whole SSRF class**, but it currently
-breaks one template: `templates/lifestyle_day.html:221` runs JS to clean the caption and
-split it across four staggered slots. Port that logic into the Python fill step. Two
-payoffs: JS can then be disabled in both renderers, and the browser preview (which the
-frontend will sandbox with no `allow-scripts`) stops diverging from the PNG for that
-template. Until then, the route allowlist and the timeout are worth landing on their own.
+Note the allowlist must now include the storage host — page images are fetched
+over the network rather than read off disk, so an over-tight allowlist produces
+blank photos rather than an error.
 
-Complementary, outside the code: deny the render container egress to `169.254.169.254` and
-to internal service names.
+**`java_script_enabled=False` is the clean kill for the whole SSRF class**, but
+it still breaks one template: `templates/lifestyle_day.html:221` runs JS to clean
+the caption and split it across four staggered slots. Port that logic into the
+Python fill step. Two payoffs: JS can then be disabled in both renderers, and the
+browser preview (sandboxed with no `allow-scripts`) stops diverging from the PNG
+for that template. Until then, the route allowlist and a timeout are worth
+landing on their own.
+
+Complementary, outside the code: deny the render container egress to
+`169.254.169.254` and to internal service names.
 
 ---
 
 ## 5. Reject markup at the API boundary
 
-`RewriteRequest.text: dict[str, Any]` (`routes.py:65`) merges unbounded, unvalidated keys
-into `post.content`, which later reach placeholders. The API should accept **field values,
-never markup**:
+`RewriteRequest.text: dict[str, Any]` (`routes.py:69`) merges unbounded,
+unvalidated keys into `post.content`, which later reach placeholders. The API
+should accept **field values, never markup**:
 
 ```python
 _ALLOWED_TEXT_KEYS = {
@@ -239,30 +263,35 @@ _MARKUP_RE = re.compile(
 )
 ```
 
-Reject unknown keys with 422 and any string value matching `_MARKUP_RE`. Same check on the
-`slides` list items. This also keeps the door shut on a future WYSIWYG editor posting HTML
-back — that would be stored XSS plus a server-side renderer that executes it.
+Reject unknown keys with 422 and any string value matching `_MARKUP_RE`. Same
+check on the `slides` list items. This also keeps the door shut on a future
+WYSIWYG editor posting HTML back — that would be stored XSS plus a server-side
+renderer that executes it.
 
 ---
 
-## 6. Response hygiene (introduced by `afaff00`)
+## 6. Stop duplicating markup into every response
 
-Not exploitable on their own, but worth fixing while this is open:
+**Rewritten.** The original finding was that `html_source` leaked
+`file:///app/runs/…` container paths. `c3d7bbd` removed the `file://` scheme
+entirely, so that disclosure is gone.
 
-- **`html_source` is returned to clients.** `enrich_composed_with_html` (`preview.py:95`)
-  copies each page dict and adds `html_content` without removing `html_source`, so responses
-  carry two full copies of every page's markup — and `html_source` still holds
-  `file:///app/runs/<tenant>/<post>/…` absolute paths, disclosing internal container layout.
-  Strip `html_source` in the response mapper; keep it in the DB, where `render_post` and
-  `animate_post` read it.
-- **The list endpoint inlines every image.** `_post_response` (`routes.py:140`) calls
-  `enrich_composed_with_html` for `GET /posts` too, so the queue fetch returns base64 data
-  URIs for every page of every post. Gate enrichment to single-post reads, or put it behind
-  an explicit `?include=html`.
-- **Revisions now store markup.** `_add_revision` snapshots `composed`, which since
-  `afaff00` contains `html_source`, so `post_revisions.payload` grows by a full document set
-  per edit. Consider stripping `html_source` from the snapshot and letting the on-disk file
-  be the revision's copy.
+What replaced it is waste rather than exposure. `page_preview_html`
+(`preview.py:6-11`) now returns `html_source` unchanged, and
+`enrich_composed_with_html` (`preview.py:14`) adds it as `html_content` **without
+removing `html_source`**. The two fields are byte-identical, so every response
+carries each page's full markup twice.
+
+`_post_response` (`routes.py:140`) applies that to **every** response including
+`GET /posts`, so one review-queue load returns two copies of the markup for every
+page of every post, up to the 50-post default limit.
+
+- Strip `html_source` in the response mapper; keep it in the DB, where
+  `render_post` and `animate_post` read it.
+- Gate enrichment to single-post reads, or put it behind `?include=html`.
+- `_add_revision` snapshots `composed` (`service.py:139`), which contains
+  `html_source`, so `post_revisions.payload` grows by a full document set per
+  edit. Consider excluding it from the snapshot.
 
 ---
 
@@ -275,6 +304,11 @@ def test_slide_title_is_escaped():
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
 
+# 1 — url scheme allowlist
+def test_non_http_image_url_dropped():
+    html = fill_placeholders('<img src="{{image_url}}">', {"image_url": "javascript:alert(1)"})
+    assert "javascript:" not in html
+
 # 2 — variant breakout
 def test_variant_css_breakout_rejected():
     out = apply_color_variant(":root{--bg:#fff;}", {"--bg": "red; } </style><script>x</script>"})
@@ -284,6 +318,12 @@ def test_variant_css_breakout_rejected():
 def test_rewrite_rejects_markup():
     r = client.post(f"/posts/{pid}/rewrite", json={"caption": "<script>x</script>"})
     assert r.status_code == 422
+
+# 6 — markup returned once, and not on the list endpoint
+def test_response_does_not_duplicate_markup():
+    page = client.get(f"/posts/{pid}").json()["composed"]["pages"][0]
+    assert "html_content" in page and "html_source" not in page
+    assert "html_content" not in client.get("/posts").json()["posts"][0]["composed"]["pages"][0]
 ```
 
 ```bash
@@ -296,12 +336,13 @@ curl -sI -H "Authorization: Bearer $TOKEN" \
 
 ## Cross-cutting, for the frontend
 
-Tracked on the FE side, listed here so both halves are visible:
+Already shipped on the FE side, listed so both halves are visible:
 
-- Render preview HTML **only** in `<iframe srcDoc sandbox="">`. Never
-  `dangerouslySetInnerHTML`, and never `allow-scripts` together with `allow-same-origin`.
-- Add CSP headers in `next.config.ts` (currently the empty scaffold). `srcdoc` documents
-  inherit the parent CSP, so `img-src` / `font-src` / `style-src` restrictions cover the
-  payload.
-- `/api/proxy/[...path]` should refuse to forward non-JSON content types, so an API response
-  of `text/html` can never be served from the app origin.
+- Preview markup renders only in `<iframe srcDoc sandbox="">` — never
+  `dangerouslySetInnerHTML`, never `allow-scripts` with `allow-same-origin`.
+  Verified against a live page: an injected `<script>` and an `onerror` handler
+  both fail to execute, and the parent cannot read into the frame.
+- CSP and security headers are set, with `img-src` naming the storage origin
+  from `STORAGE_PUBLIC_BASE_URL` for the reason given in finding 3.
+- The BFF proxy refuses to forward non-JSON responses, so the endpoint in
+  finding 3 cannot be served from the app origin.
