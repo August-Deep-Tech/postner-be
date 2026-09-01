@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import html as html_lib
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from app.config import Settings
 
@@ -12,13 +14,35 @@ PLACEHOLDER_IMAGE = "{{image_url}}"
 PLACEHOLDER_CTA = "{{cta_link}}"
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+_URL_KEYS = {"image_url", "logo_url", "cta_link"}
+_SAFE_URL_SCHEMES = {"https", "http"}  # http for local MinIO; no file:, no data:
+
+
+def _safe_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if urlsplit(raw).scheme.lower() not in _SAFE_URL_SCHEMES:
+        return ""
+    return html_lib.escape(raw, quote=True)
 
 
 def fill_placeholders(html: str, values: dict[str, str]) -> str:
-    """Replace {{key}} tokens; unknown keys become empty string."""
+    """Replace {{key}} tokens; unknown keys become empty string.
+
+    Text values are HTML-escaped. URL-like keys are also scheme-allowlisted
+    (http/https only) so they cannot break out of src/href attributes.
+    """
 
     def _repl(match: re.Match[str]) -> str:
-        return values.get(match.group(1), "")
+        key = match.group(1)
+        raw = values.get(key)
+        if raw is None:
+            return ""
+        text = str(raw)
+        if key in _URL_KEYS or key.startswith("image_") or key.endswith("_url"):
+            return _safe_url(text)
+        return html_lib.escape(text, quote=True)
 
     return _PLACEHOLDER_RE.sub(_repl, html)
 
