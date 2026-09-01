@@ -100,9 +100,19 @@ def _brand_fields(
     return name, tagline, description, logo_url
 
 
-def _image_ref_url(ref: Any) -> str | None:
-    """Extract public URL from by_page entry (dict or legacy string)."""
+def _image_ref_url(ref: Any, settings: Settings | None = None) -> str | None:
+    """Extract public URL from a by_page entry (dict or legacy string).
+
+    Rebuilds from the stored object `key` against the *current*
+    storage_public_base_url when available, so a post keeps rendering
+    across a storage backend/domain change -- only the URL cached at
+    upload time can go stale, not the key.
+    """
     if isinstance(ref, dict):
+        key = ref.get("key")
+        if key and settings and settings.storage_public_base_url:
+            base = settings.storage_public_base_url.rstrip("/")
+            return f"{base}/{str(key).lstrip('/')}"
         url = ref.get("url")
         return str(url) if _is_http_url(str(url or "")) else None
     if isinstance(ref, str) and _is_http_url(ref):
@@ -521,7 +531,7 @@ async def generate_post_images(
         by_page[page_id] = {"url": url, "key": key}
         generated.append(page_id)
 
-    urls = [u for u in (_image_ref_url(v) for v in by_page.values()) if u]
+    urls = [u for u in (_image_ref_url(v, settings) for v in by_page.values()) if u]
     post.images = {
         "by_page": by_page,
         "paths": urls,
@@ -594,7 +604,7 @@ def _fill_pages_html(
                     fields["series"] = tagline.upper()
 
                 if page_def.images > 0:
-                    img_url = _image_ref_url(by_page.get(page_def.id))
+                    img_url = _image_ref_url(by_page.get(page_def.id), settings)
                     page_images = [img_url] if img_url else []
                 else:
                     page_images = []
@@ -614,7 +624,7 @@ def _fill_pages_html(
                 }
             return filled
 
-        image_url = _image_ref_url(by_page.get("main")) or (
+        image_url = _image_ref_url(by_page.get("main"), settings) or (
             str((post.images or {}).get("image_path") or "")
             if _is_http_url(str((post.images or {}).get("image_path") or ""))
             else None
