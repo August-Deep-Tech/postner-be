@@ -138,7 +138,6 @@ class Post(Base):
     pack_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     template_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     variant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    asset_dir: Mapped[str] = mapped_column(String(1024), nullable=False)
     # Flexible payloads
     content: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)
     images: Mapped[dict[str, Any]] = mapped_column(JsonType, default=dict, nullable=False)

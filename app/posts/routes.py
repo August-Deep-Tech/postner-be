@@ -13,7 +13,11 @@ from app.config import Settings, SocialFormat, get_settings
 from app.db.models import Post
 from app.db.session import get_db
 from app.posts import service as post_service
-from app.posts.preview import enrich_composed_with_html, page_preview_html
+from app.posts.preview import (
+    enrich_composed_with_html,
+    page_preview_html,
+    strip_composed_html,
+)
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -89,7 +93,6 @@ class PostResponse(BaseModel):
     pack_id: str | None
     template_id: str | None
     variant_id: str | None
-    asset_dir: str
     content: dict[str, Any]
     images: dict[str, Any]
     composed: dict[str, Any]
@@ -123,7 +126,8 @@ class ListRevisionsResponse(BaseModel):
     revisions: list[RevisionItem]
 
 
-def _post_response(post: Post) -> PostResponse:
+def _post_response(post: Post, *, include_html: bool = True) -> PostResponse:
+    composed = enrich_composed_with_html(post) if include_html else strip_composed_html(post)
     return PostResponse(
         id=str(post.id),
         tenant_id=str(post.tenant_id),
@@ -134,10 +138,9 @@ def _post_response(post: Post) -> PostResponse:
         pack_id=post.pack_id,
         template_id=post.template_id,
         variant_id=post.variant_id,
-        asset_dir=post.asset_dir,
         content=post.content or {},
         images=post.images or {},
-        composed=enrich_composed_with_html(post),
+        composed=composed,
         meta=post.meta or {},
         created_at=post.created_at.isoformat() if post.created_at else "",
         updated_at=post.updated_at.isoformat() if post.updated_at else "",
@@ -146,11 +149,20 @@ def _post_response(post: Post) -> PostResponse:
 
 @router.get("", response_model=ListPostsResponse)
 def list_posts(
+    include: str | None = None,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
 ) -> ListPostsResponse:
+    """List posts. Pass ?include=html to embed each page's preview markup.
+
+    Full HTML is omitted by default: a queue load can be dozens of posts,
+    each with several pages, and most callers only need metadata.
+    """
     posts = post_service.list_posts(db, auth.tenant_id)
-    return ListPostsResponse(posts=[_post_response(p) for p in posts])
+    include_html = include == "html"
+    return ListPostsResponse(
+        posts=[_post_response(p, include_html=include_html) for p in posts]
+    )
 
 
 @router.post("", response_model=PostResponse)
@@ -401,11 +413,12 @@ def get_revisions(
 
 
 @router.post("/{post_id}/undo", response_model=PostResponse)
-def post_undo(
+async def post_undo(
     post_id: uuid.UUID,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> PostResponse:
     post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
-    post = post_service.undo_post(db, post)
+    post = await post_service.undo_post(db, post, settings=settings)
     return _post_response(post)
