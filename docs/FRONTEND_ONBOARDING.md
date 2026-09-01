@@ -300,7 +300,6 @@ Content-Type: application/json
 | Draft | POST | `/posts` |
 | Photos | POST | `/posts/{id}/images` |
 | HTML preview | POST | `/posts/{id}/compose` |
-| Page HTML | GET | `/posts/{id}/pages/{page_id}/html` |
 | PNG render | POST | `/posts/{id}/render` |
 | Get state | GET | `/posts/{id}` |
 | Reject / approve (approve auto-renders) | POST | `/posts/{id}/feedback` |

@@ -68,7 +68,6 @@ JWT claims: `sub` (user_id), `tenant_id`. Set `Authorization: Bearer <token>` on
 |---|---|---|
 | POST | `/posts` | Draft (`url`, `brand_id`, `pack_id`\|`template_id`, `format`, `variant_id`, `with_images`) |
 | GET | `/posts/{id}` | Full state (tenant-scoped); `composed` enriched with `html_content` |
-| GET | `/posts/{id}/pages/{page_id}/html` | Browser-ready filled HTML for one page |
 | POST | `/posts/{id}/images` | Recraft (`pages?`, `regenerate`) |
 | POST | `/posts/{id}/compose` | Fill HTML preview (`pages?`, `ensure_images`) — no Playwright |
 | POST | `/posts/{id}/render` | Playwright PNG + upload (`pages?`) → status `rendered` |

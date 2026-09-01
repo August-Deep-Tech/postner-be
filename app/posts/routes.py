@@ -4,8 +4,7 @@ import re
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 from sqlalchemy.orm import Session
 
@@ -15,11 +14,7 @@ from app.db.models import Post
 from app.db.session import get_db
 from app.models.schemas import CarouselSlide
 from app.posts import service as post_service
-from app.posts.preview import (
-    enrich_composed_with_html,
-    page_preview_html,
-    strip_composed_html,
-)
+from app.posts.preview import enrich_composed_with_html, strip_composed_html
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -251,28 +246,6 @@ def get_post(
 ) -> PostResponse:
     post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
     return _post_response(post)
-
-
-@router.get("/{post_id}/pages/{page_id}/html", response_class=HTMLResponse)
-def get_page_preview_html(
-    post_id: uuid.UUID,
-    page_id: str,
-    auth: AuthContext = Depends(get_current_auth),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """Browser-ready filled HTML for iframe / srcdoc (images inlined as data URIs)."""
-    post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
-    pages = list((post.composed or {}).get("pages") or [])
-    page = next((p for p in pages if str(p.get("page_id")) == page_id), None)
-    if page is None:
-        raise HTTPException(status_code=404, detail=f"Page '{page_id}' not found")
-    html = page_preview_html(post, page)
-    if not html:
-        raise HTTPException(
-            status_code=404,
-            detail="Filled HTML not found; call POST /posts/{id}/compose first",
-        )
-    return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
 
 
 @router.post("/{post_id}/images", response_model=PostResponse)

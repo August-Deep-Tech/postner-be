@@ -11,6 +11,7 @@ captures/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-gen/
 venv/
 *.egg-info/
 .pytest_cache/
