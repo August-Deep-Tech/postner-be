@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -12,10 +13,41 @@ from app.auth.deps import AuthContext, get_current_auth
 from app.config import Settings, SocialFormat, get_settings
 from app.db.models import Post
 from app.db.session import get_db
+from app.models.schemas import CarouselSlide
 from app.posts import service as post_service
 from app.posts.preview import enrich_composed_with_html, page_preview_html
 
 router = APIRouter(prefix="/posts", tags=["posts"])
+
+# Rewrite lets callers overwrite field values, never markup or internal
+# bookkeeping keys (e.g. "mode", "pack_page_ids") that the API also stores
+# under post.content.
+_ALLOWED_TEXT_KEYS = {
+    "ig_fb_caption",
+    "tiktok_script",
+    "visual_prompt",
+    "overlay_text",
+    "tagline",
+    "brand",
+    "slides",
+}
+_MARKUP_RE = re.compile(
+    r"<\s*/?\s*(script|iframe|style|svg|object|embed|link|meta)\b|javascript:",
+    re.IGNORECASE,
+)
+
+
+def _check_markup(value: Any, path: str) -> None:
+    """Reject strings that look like markup/script injection, anywhere in value."""
+    if isinstance(value, str):
+        if _MARKUP_RE.search(value):
+            raise ValueError(f"'{path}' contains disallowed markup")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _check_markup(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _check_markup(item, f"{path}[{index}]")
 
 
 class CreatePostRequest(BaseModel):
@@ -70,6 +102,30 @@ class RewriteRequest(BaseModel):
     caption: str | None = None
     suggest: bool = False
     recompose: bool = False
+
+    @model_validator(mode="after")
+    def _validate_text(self) -> RewriteRequest:
+        if self.caption is not None:
+            _check_markup(self.caption, "caption")
+        if self.text is None:
+            return self
+        unknown = set(self.text) - _ALLOWED_TEXT_KEYS
+        if unknown:
+            raise ValueError(
+                f"Unsupported text field(s): {', '.join(sorted(unknown))}"
+            )
+        if "slides" in self.text:
+            slides = self.text["slides"]
+            if not isinstance(slides, list):
+                raise ValueError("'slides' must be a list")
+            # Validates each slide's shape and drops any unknown per-slide
+            # keys rather than storing them verbatim.
+            self.text["slides"] = [
+                CarouselSlide.model_validate(slide).model_dump() for slide in slides
+            ]
+        for key, value in self.text.items():
+            _check_markup(value, key)
+        return self
 
 
 class FeedbackRequest(BaseModel):
