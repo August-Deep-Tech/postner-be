@@ -32,7 +32,7 @@ def _guess_content_type(path: Path | None, explicit: str | None, key: str = "") 
 
 
 class S3CompatibleStorage:
-    """S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, etc.)."""
+    """S3-compatible object storage (AWS S3, Cloudflare R2, etc.)."""
 
     def __init__(
         self,

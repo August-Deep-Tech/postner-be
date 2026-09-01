@@ -134,7 +134,7 @@ POST /posts/{post_id}/compose
 ```
 
 - `ensure_images: true` gap-fills Recraft photos if needed, then fills HTML.
-- Review with `composed.pages[].html_content` via `iframe.srcdoc` (images are http(s) from MinIO/CDN — not `file://`).
+- Review with `composed.pages[].html_content` via `iframe.srcdoc` (images are http(s) from R2/CDN — not `file://`).
 - `composed.pages[].url` / `key` are **absent** until render.
 - Optional early PNG (without approving): `POST /posts/{id}/render`.
 - Legacy posts with `file://` assets need recompose after regenerating images.
@@ -265,7 +265,7 @@ Content-Type: application/json
 }
 ```
 
-- **`html_content`** — response-only copy of filled HTML for `iframe.srcdoc` (img src = MinIO/CDN URLs).
+- **`html_content`** — response-only copy of filled HTML for `iframe.srcdoc` (img src = R2/CDN URLs).
 - **`html_source`** — tracked in DB (revision/undo).
 - No `url` until render/approve.
 - Recraft sources live at `images.by_page.<id>.url` (object storage).
@@ -281,7 +281,7 @@ Content-Type: application/json
 ```
 
 - Prefer **`url`** for download / `<img>`.
-- Storage is S3-compatible only (`STORAGE_BACKEND=s3`); local MinIO or cloud R2/S3.
+- Storage is S3-compatible only (`STORAGE_BACKEND=s3`); Cloudflare R2 in dev and prod.
 - Recraft sources and finals both live in object storage.
 
 ---

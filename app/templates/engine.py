@@ -15,7 +15,7 @@ PLACEHOLDER_CTA = "{{cta_link}}"
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 _URL_KEYS = {"image_url", "logo_url", "cta_link"}
-_SAFE_URL_SCHEMES = {"https", "http"}  # http for local MinIO; no file:, no data:
+_SAFE_URL_SCHEMES = {"https", "http"}  # http kept for local dev backends; no file:, no data:
 
 
 def _safe_url(value: str) -> str:

@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     storage_endpoint_url: str = Field(default="", alias="STORAGE_ENDPOINT_URL")
     storage_region: str = Field(default="auto", alias="STORAGE_REGION")
     storage_public_base_url: str = Field(default="", alias="STORAGE_PUBLIC_BASE_URL")
-    # "path" for MinIO; "auto" for AWS/R2
+    # "auto" for AWS/R2; "path" for path-style S3-compatible backends
     storage_addressing_style: str = Field(default="auto", alias="STORAGE_ADDRESSING_STYLE")
 
     templates_dir: Path = REPO_ROOT / "templates"
