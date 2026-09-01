@@ -6,7 +6,7 @@ Multi-tenant FastAPI backend: register → brands → draft post → Recraft ima
 
 - **Auth:** email/password + JWT
 - **DB:** Postgres (Docker) — tenants, brands, **brand variants**, posts, revisions
-- **Assets:** **object storage only** (MinIO in Docker, R2/S3 in prod). Filled HTML in `posts.composed`; Recraft / logos / PNG / MP4 as public URLs.
+- **Assets:** **object storage only** (S3-compatible; R2 in dev/prod). Filled HTML in `posts.composed`; Recraft / logos / PNG / MP4 as public URLs.
 - **Packs/templates:** on disk (shared catalog). Starter variant JSON under `variants/` is **seeded into each brand** on create.
 
 ## Quick start (Docker)
@@ -18,10 +18,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-API: http://localhost:8001/docs  
-MinIO API: http://localhost:9000 (console :9001) — bucket `postner`, public-read.
+API: http://localhost:8001/docs
 
-Compose brings up **api** + **db** + **minio** (Postgres host port **5434**). Named volumes: `pgdata`, `minio_data`.
+Compose brings up **api** + **db** (Postgres host port **5434**). Named volume: `pgdata`. Object storage is remote S3/R2 — set `STORAGE_*` in `.env`/`.env.local` before starting.
 
 ## Local (without Docker API)
 
@@ -32,12 +31,12 @@ python -m venv .venv
 pip install -r requirements.txt
 playwright install chromium
 
-# Start Postgres + MinIO
-docker compose up db minio minio-init -d
+# Start Postgres
+docker compose up db -d
 
 cp .env.example .env
 # DATABASE_URL=postgresql+psycopg://postner:postner@localhost:5434/postner
-# Point STORAGE_* at MinIO (see .env.example); STORAGE_ENDPOINT_URL=http://localhost:9000
+# Point STORAGE_* at your S3-compatible bucket (see .env.example)
 
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -118,6 +117,6 @@ Runtime media (Recraft, logos, composed PNG/MP4) is **only** in object storage. 
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM |
 | `FAL_KEY` | Recraft |
 | `STORAGE_BACKEND` | Must be `s3` |
-| `STORAGE_BUCKET` / keys / `STORAGE_ENDPOINT_URL` | S3-compatible store |
-| `STORAGE_PUBLIC_BASE_URL` | Browser-reachable base (MinIO: `http://localhost:9000/postner`) |
-| `STORAGE_ADDRESSING_STYLE` | `path` for MinIO; `auto` for AWS/R2 |
+| `STORAGE_BUCKET` / keys / `STORAGE_ENDPOINT_URL` | S3-compatible store (e.g. Cloudflare R2) |
+| `STORAGE_PUBLIC_BASE_URL` | Browser-reachable base URL for the bucket |
+| `STORAGE_ADDRESSING_STYLE` | `auto` for AWS/R2 |

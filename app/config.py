@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # Comma-separated FE origins; empty → allow all (dev)
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
-    # Object storage only (MinIO locally, Cloudflare R2 / AWS S3 in prod).
+    # Object storage only (S3-compatible; Cloudflare R2 in dev/prod).
     storage_backend: str = Field(default="s3", alias="STORAGE_BACKEND")
     storage_bucket: str = Field(default="", alias="STORAGE_BUCKET")
     storage_access_key_id: str = Field(default="", alias="STORAGE_ACCESS_KEY_ID")
