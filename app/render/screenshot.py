@@ -24,6 +24,9 @@ async def screenshot_html(
                 viewport={"width": width, "height": height},
                 device_scale_factor=1,
             )
+            failed_requests: list[str] = []
+            page.on("requestfailed", lambda r: failed_requests.append(r.url))
+
             await page.set_content(html, wait_until="networkidle")
             await page.wait_for_timeout(500)
             await page.evaluate("() => document.fonts.ready")
@@ -37,6 +40,12 @@ async def screenshot_html(
                     path=str(dest),
                     type="png",
                     clip={"x": 0, "y": 0, "width": width, "height": height},
+                )
+
+            if failed_requests:
+                dest.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"Assets failed to load during render: {failed_requests}"
                 )
         finally:
             await browser.close()

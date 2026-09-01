@@ -39,9 +39,17 @@ async def render_html_video(
                     viewport={"width": width, "height": height},
                     device_scale_factor=1,
                 )
+                failed_requests: list[str] = []
+                page.on("requestfailed", lambda r: failed_requests.append(r.url))
+
                 await page.set_content(motion_html, wait_until="networkidle")
                 await page.wait_for_timeout(400)
                 await page.evaluate("() => document.fonts.ready")
+
+                if failed_requests:
+                    raise RuntimeError(
+                        f"Assets failed to load during render: {failed_requests}"
+                    )
 
                 await page.evaluate(
                     """() => {
