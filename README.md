@@ -5,9 +5,9 @@ Multi-tenant FastAPI backend: register → brands → draft post → Recraft ima
 ## Stack
 
 - **Auth:** email/password + JWT
-- **DB:** Postgres (Docker) — tenants, brands, **brand variants**, posts, revisions
+- **DB:** Postgres (Docker) — tenants, brands, posts, revisions
 - **Assets:** **object storage only** (S3-compatible; R2 in dev/prod). Filled HTML in `posts.composed`; Recraft / logos / PNG / MP4 as public URLs.
-- **Packs/templates:** on disk (shared catalog). Starter variant JSON under `variants/` is **seeded into each brand** on create.
+- **Packs/templates:** on disk (shared catalog). Each post stores an `image_style` (`realistic` / `illustration` / `graphics`) used by Recraft and the visual prompt.
 
 ## Quick start (Docker)
 
@@ -66,14 +66,14 @@ JWT claims: `sub` (user_id), `tenant_id`. Set `Authorization: Bearer <token>` on
 
 | Method | Path | Role |
 |---|---|---|
-| POST | `/posts` | Draft (`url`, `brand_id`, `pack_id`\|`template_id`, `format`, `variant_id`, `with_images`) |
+| POST | `/posts` | Draft (`url`, `brand_id`, `pack_id`\|`template_id`, `format`, `image_style`, `with_images`) |
 | GET | `/posts/{id}` | Full state (tenant-scoped); `composed` enriched with `html_content` |
 | POST | `/posts/{id}/images` | Recraft (`pages?`, `regenerate`) |
 | POST | `/posts/{id}/compose` | Fill HTML preview (`pages?`, `ensure_images`) — no Playwright |
 | POST | `/posts/{id}/render` | Playwright PNG + upload (`pages?`) → status `rendered` |
 | POST | `/posts/{id}/animate` | MP4 (`motion_preset`); requires rendered PNGs |
 | POST | `/posts/{id}/resize` | Re-fill HTML at `format` (clears PNG urls; call `/render` after) |
-| POST | `/posts/{id}/redesign` | `variant_id` and/or `propose: true`, then re-fill HTML if `recompose` |
+| POST | `/posts/{id}/redesign` | Optional `image_style`, then re-fill HTML if `recompose` |
 | POST | `/posts/{id}/rewrite` | Caption/text or `suggest` re-LLM; `recompose` re-fills HTML |
 | POST | `/posts/{id}/undo` | Restore previous revision snapshot |
 | GET | `/posts/{id}/revisions` | List `{ id, kind, version, created_at }` |
@@ -81,19 +81,17 @@ JWT claims: `sub` (user_id), `tenant_id`. Set `Authorization: Bearer <token>` on
 
 `format`: `ig_feed` | `ig_portrait` | `ig_story` | `tiktok` | `fb_post` | **`x_post`** (1600×900)
 
-**Statuses:** `drafted` → `preview` (HTML) → `rendered` (PNG) → `approved` / `rejected`.
-### Packs + variants (design propose)
+`image_style` (omit or `null` = pick one at random, then lock it on the post): `realistic` → Recraft `realistic_image` | `illustration` → `digital_illustration` | `graphics` → `vector_illustration`
 
-Packs are multi-page templates on disk. **Variants are per-brand color palettes in Postgres** (`brand_variants`). Creating a brand seeds starter palettes from `variants/*.json`.
+**Statuses:** `drafted` → `preview` (HTML) → `rendered` (PNG) → `approved` / `rejected`.
+### Packs (design propose)
+
+Packs are multi-page templates on disk.
 
 | Method | Path | Role |
 |---|---|---|
 | GET | `/packs` | List packs |
-| POST | `/packs/propose` | Assemble new packs; `with_variants` requires `brand_id` and saves skins on that brand |
-| GET | `/variants?brand_id=` | List that brand’s variants (`id`, `slug`, `label`, `css_vars`) |
-| POST | `/variants/propose` | **Requires `brand_id`**; palettes for `pack_id` **or** `template_id` (XOR), saved on the brand |
-
-Variant generation is biased by: pack/template HTML + required CSS keys + brand name/tagline/description.
+| POST | `/packs/propose` | Assemble new packs from the page catalog |
 
 See [`templates/README.md`](templates/README.md).
 
@@ -102,7 +100,6 @@ See [`templates/README.md`](templates/README.md).
 | Path | What |
 |---|---|
 | `templates/` | HTML templates + packs (shared catalog) |
-| `variants/` | Starter JSON only (seed source for new brands) |
 | `brands/<slug>/` | Optional seed logo files — uploaded to object storage on brand create |
 
 Runtime media (Recraft, logos, composed PNG/MP4) is **only** in object storage. `STORAGE_BACKEND=local` is removed.

@@ -25,6 +25,15 @@ SOCIAL_SIZES: dict[SocialFormat, tuple[int, int]] = {
     "x_post": (1600, 900),
 }
 
+ImageStyle = Literal["realistic", "illustration", "graphics"]
+
+# Recraft V3's `style` parameter (fal.ai) for each image style choice.
+RECRAFT_STYLE_BY_IMAGE_STYLE: dict[ImageStyle, str] = {
+    "realistic": "realistic_image",
+    "illustration": "digital_illustration",
+    "graphics": "vector_illustration",
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -75,7 +84,6 @@ class Settings(BaseSettings):
     storage_addressing_style: str = Field(default="auto", alias="STORAGE_ADDRESSING_STYLE")
 
     templates_dir: Path = REPO_ROOT / "templates"
-    variants_dir: Path = REPO_ROOT / "variants"
     brands_dir: Path = REPO_ROOT / "brands"
 
     @model_validator(mode="after")

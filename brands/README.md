@@ -1,6 +1,6 @@
 # Brands
 
-File-based brand profiles (same idea as `variants/`). Shape is migration-friendly for a future DB.
+File-based brand profiles. Shape is migration-friendly for a future DB.
 
 ## Layout
 

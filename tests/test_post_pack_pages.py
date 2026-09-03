@@ -86,7 +86,7 @@ def _create_pack_draft(db, tenant, settings):
             pack_id=PACK_ID,
             template_id=None,
             format_name=None,
-            variant_id=None,
+            image_style=None,
             with_images=False,
             settings=settings,
         )
@@ -179,7 +179,7 @@ def test_single_mode_draft_has_no_pack_pages(
             pack_id=None,
             template_id="default",
             format_name=None,
-            variant_id=None,
+            image_style=None,
             with_images=False,
             settings=settings,
         )

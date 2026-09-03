@@ -40,7 +40,6 @@ services:
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
       - ./templates:/app/templates
-      - ./variants:/app/variants
       - ./brands:/app/brands
     depends_on:
       db:

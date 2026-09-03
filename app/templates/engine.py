@@ -107,7 +107,7 @@ _ROOT_BLOCK_RE = re.compile(
 _VAR_RE = re.compile(r"(--[\w-]+)\s*:\s*([^;]+);")
 
 
-def apply_color_variant(html: str, css_vars: dict[str, str]) -> str:
+def apply_css_vars(html: str, css_vars: dict[str, str]) -> str:
     """Rewrite only :root custom properties; leave layout and font-family alone."""
     if not css_vars:
         return html
@@ -161,7 +161,7 @@ def ensure_locked_font(html: str, settings: Settings) -> str:
 
     # Ensure a CSS variable for the locked font without overriding author font-family rules
     if "--font-family" not in html:
-        html = apply_color_variant(html, {"--font-family": f'"{font_family}", sans-serif'})
+        html = apply_css_vars(html, {"--font-family": f'"{font_family}", sans-serif'})
 
     return html
 
@@ -173,15 +173,12 @@ def render_filled_html(
     image_url: str,
     cta_link: str,
     settings: Settings,
-    css_vars: dict[str, str] | None = None,
     brand: str = "",
     tagline: str = "",
     logo_url: str = "",
 ) -> str:
     html = load_template_html(template_id, settings)
     html = ensure_locked_font(html, settings)
-    if css_vars:
-        html = apply_color_variant(html, css_vars)
     return fill_template(
         html,
         caption=caption,

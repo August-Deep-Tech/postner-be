@@ -193,9 +193,6 @@ def create_brand(
         )
     db.commit()
     db.refresh(brand)
-    from app.brands.variants import seed_brand_variants_from_disk
-
-    seed_brand_variants_from_disk(db, brand, settings)
     return brand
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -13,8 +14,13 @@ from sqlalchemy.orm import Session
 
 from app.brands.service import brand_formats, brand_to_profile, get_tenant_brand
 from app.brands.store import BrandProfile
-from app.brands.variants import get_brand_variant
-from app.config import Settings, SocialFormat, has_llm_credentials
+from app.config import (
+    ImageStyle,
+    RECRAFT_STYLE_BY_IMAGE_STYLE,
+    Settings,
+    SocialFormat,
+    has_llm_credentials,
+)
 from app.db.models import Brand, Feedback, Post, PostRevision
 from app.generate.posts import generate_carousel, generate_post
 from app.images.recraft import generate_recraft_image_bytes
@@ -24,24 +30,22 @@ from app.scrape.page import scrape_page
 from app.storage import get_storage
 from app.templates.engine import render_filled_html
 from app.templates.packs import load_pack, pack_field_schema, render_pack_page_html
-from app.templates.variants import propose_and_save_variants
+
+_IMAGE_STYLES: tuple[ImageStyle, ...] = ("realistic", "illustration", "graphics")
 
 
-def _load_post_variant_css(db: Session, post: Post) -> dict[str, Any] | None:
-    if not post.variant_id:
-        return None
-    brand = db.get(Brand, post.brand_id) if post.brand_id else None
-    row = get_brand_variant(
-        db,
-        tenant_id=post.tenant_id,
-        brand=brand,
-        variant_id=post.variant_id,
-    )
-    if row is None:
+def _resolve_image_style(image_style: str | None) -> ImageStyle:
+    """None/"auto" -> a random concrete style, locked in for the post's lifetime."""
+    raw = (image_style or "").strip().lower()
+    if not raw or raw == "auto":
+        return random.choice(_IMAGE_STYLES)
+    if raw not in _IMAGE_STYLES:
         raise HTTPException(
-            status_code=404, detail=f"Variant '{post.variant_id}' not found"
+            status_code=400,
+            detail=f"Invalid image_style '{image_style}'. Expected one of: "
+            f"{', '.join(_IMAGE_STYLES)}, auto",
         )
-    return dict(row.css_vars or {})
+    return raw  # type: ignore[return-value]
 
 
 def _resolve_format(
@@ -161,7 +165,7 @@ def _post_snapshot(post: Post) -> dict[str, Any]:
         "format": post.format,
         "pack_id": post.pack_id,
         "template_id": post.template_id,
-        "variant_id": post.variant_id,
+        "image_style": post.image_style,
         "content": dict(post.content or {}),
         "images": dict(post.images or {}),
         "composed": _snapshot_composed(post),
@@ -293,7 +297,7 @@ async def create_draft_post(
     pack_id: str | None,
     template_id: str | None,
     format_name: SocialFormat | None,
-    variant_id: str | None,
+    image_style: str | None,
     with_images: bool,
     settings: Settings,
 ) -> Post:
@@ -313,6 +317,7 @@ async def create_draft_post(
 
     brand_name, tagline, description, logo_url = _brand_fields(profile, brand_row)
     run_id = _new_run_id()
+    resolved_image_style = _resolve_image_style(image_style)
 
     try:
         page = await scrape_page(url)
@@ -342,6 +347,7 @@ async def create_draft_post(
                 brand_name=brand_name,
                 brand_tagline=tagline,
                 brand_description=description,
+                image_style=resolved_image_style,
             )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
@@ -385,6 +391,7 @@ async def create_draft_post(
                 brand_name=brand_name,
                 brand_tagline=tagline,
                 brand_description=description,
+                image_style=resolved_image_style,
             )
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
@@ -407,24 +414,6 @@ async def create_draft_post(
         template_id = tid
         pack_id = None
 
-    if variant_id:
-        if brand_row is None:
-            raise HTTPException(
-                status_code=400,
-                detail="brand_id is required when setting variant_id",
-            )
-        row = get_brand_variant(
-            db,
-            tenant_id=tenant_id,
-            brand=brand_row,
-            variant_id=variant_id,
-        )
-        if row is None:
-            raise HTTPException(
-                status_code=404, detail=f"Variant '{variant_id}' not found"
-            )
-        variant_id = str(row.id)
-
     post = Post(
         tenant_id=tenant_id,
         brand_id=brand_row.id if brand_row else None,
@@ -433,7 +422,7 @@ async def create_draft_post(
         format=fmt,
         pack_id=pack_id,
         template_id=template_id,
-        variant_id=variant_id,
+        image_style=resolved_image_style,
         content=content,
         images={},
         composed={},
@@ -505,6 +494,7 @@ async def generate_post_images(
     by_page: dict[str, Any] = dict(existing.get("by_page") or {})
     slots = _page_image_slots(post, settings)
     page_filter = set(pages) if pages else None
+    recraft_style = RECRAFT_STYLE_BY_IMAGE_STYLE.get(post.image_style)  # type: ignore[arg-type]
 
     generated: list[str] = []
     for slot in slots:
@@ -520,7 +510,9 @@ async def generate_post_images(
                 detail=f"Page '{page_id}' needs an image but no visual_prompt is set",
             )
         try:
-            data = await generate_recraft_image_bytes(prompt=prompt, settings=settings)
+            data = await generate_recraft_image_bytes(
+                prompt=prompt, style=recraft_style, settings=settings
+            )
             key = _source_object_key(post, slot["filename"])
             url = storage.upload_bytes(data, key, content_type="image/png")
         except Exception as exc:  # noqa: BLE001
@@ -555,7 +547,6 @@ def _fill_pages_html(
     post: Post,
     settings: Settings,
     *,
-    variant_css: dict[str, Any] | None,
     by_page: dict[str, Any],
     page_filter: set[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
@@ -615,7 +606,6 @@ def _fill_pages_html(
                     fields=fields,
                     settings=settings,
                     image_urls=page_images,
-                    variant_css=variant_css,
                 )
                 filled[page_def.id] = {
                     "index": index,
@@ -641,7 +631,6 @@ def _fill_pages_html(
             image_url=image_url,
             cta_link=post.url,
             settings=settings,
-            css_vars=variant_css,
             brand=brand_name,
             tagline=tagline,
             logo_url=logo_url,
@@ -692,7 +681,6 @@ async def compose_post(
             record_revision=False,
         )
 
-    variant_css = _load_post_variant_css(db, post)
     by_page = dict((post.images or {}).get("by_page") or {})
     page_filter = set(pages) if pages else None
     composed_pages: list[dict[str, Any]] = list((post.composed or {}).get("pages") or [])
@@ -701,7 +689,6 @@ async def compose_post(
     filled = _fill_pages_html(
         post,
         settings,
-        variant_css=variant_css,
         by_page=by_page,
         page_filter=page_filter,
     )
@@ -955,56 +942,13 @@ async def redesign_post(
     db: Session,
     *,
     post: Post,
-    variant_id: str | None,
-    propose: bool,
+    image_style: str | None,
     regenerate_images: bool,
     recompose: bool,
     settings: Settings,
 ) -> Post:
-    brand = db.get(Brand, post.brand_id) if post.brand_id else None
-    if propose and not variant_id:
-        if brand is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Post needs a brand_id to propose variants",
-            )
-        if not has_llm_credentials(settings):
-            raise HTTPException(
-                status_code=500,
-                detail="Set ANTHROPIC_API_KEY or OPENAI_API_KEY to propose variants",
-            )
-        try:
-            _variants, saved_ids = await propose_and_save_variants(
-                db=db,
-                brand=brand,
-                template_id=(post.template_id or "default") if not post.pack_id else None,
-                pack_id=post.pack_id,
-                count=1,
-                settings=settings,
-            )
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(
-                status_code=502,
-                detail=f"Variant proposal failed: {exc}",
-            ) from exc
-        if not saved_ids:
-            raise HTTPException(status_code=502, detail="Variant proposal returned no ids")
-        variant_id = saved_ids[0]
-
-    if variant_id:
-        row = get_brand_variant(
-            db,
-            tenant_id=post.tenant_id,
-            brand=brand,
-            variant_id=variant_id,
-        )
-        if row is None:
-            raise HTTPException(
-                status_code=404, detail=f"Variant '{variant_id}' not found"
-            )
-        post.variant_id = str(row.id)
+    if image_style is not None:
+        post.image_style = _resolve_image_style(image_style)
 
     if regenerate_images:
         post = await generate_post_images(
@@ -1029,7 +973,7 @@ async def redesign_post(
         post,
         "redesign",
         {
-            "propose": propose,
+            "image_style": image_style,
             "regenerate_images": regenerate_images,
             "recompose": recompose,
         },
@@ -1126,8 +1070,8 @@ def _apply_snapshot(post: Post, snapshot: dict[str, Any]) -> None:
         post.pack_id = snapshot["pack_id"]
     if "template_id" in snapshot:
         post.template_id = snapshot["template_id"]
-    if "variant_id" in snapshot:
-        post.variant_id = snapshot["variant_id"]
+    if "image_style" in snapshot:
+        post.image_style = snapshot["image_style"]
     if "content" in snapshot:
         post.content = dict(snapshot["content"] or {})
     if "images" in snapshot:
@@ -1172,11 +1116,8 @@ async def undo_post(db: Session, post: Post, *, settings: Settings) -> Post:
     composed = dict(post.composed or {})
     composed_pages = list(composed.get("pages") or [])
     if composed_pages:
-        variant_css = _load_post_variant_css(db, post)
         by_page = dict((post.images or {}).get("by_page") or {})
-        filled = _fill_pages_html(
-            post, settings, variant_css=variant_css, by_page=by_page
-        )
+        filled = _fill_pages_html(post, settings, by_page=by_page)
         composed["pages"] = [
             (
                 {**page, "html_source": filled[page["page_id"]]["html_source"]}

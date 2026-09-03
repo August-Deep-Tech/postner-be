@@ -1,5 +1,20 @@
 import json
 
+IMAGE_STYLE_PROMPT_HINTS: dict[str, str] = {
+    "realistic": (
+        "Image style: natural photography. Real lighting, real materials, "
+        "candid-feeling composition — no illustration, no flat vector shapes."
+    ),
+    "illustration": (
+        "Image style: flat digital illustration. Simplified shapes, illustrated "
+        "textures, no photorealism, no photographic detail."
+    ),
+    "graphics": (
+        "Image style: flat vector graphic. Bold simple shapes, limited flat "
+        "color palette, no photographic textures, no illustrated shading."
+    ),
+}
+
 STYLE_GUIDE = """
 Brand / visual style for social posts:
 - Warm, human, approachable — education-adjacent, never cold or corporate-sterile.
@@ -37,6 +52,7 @@ def build_post_user_prompt(
     brand_name: str = "",
     brand_tagline: str = "",
     brand_description: str = "",
+    image_style: str = "",
 ) -> str:
     brand_block = ""
     if brand_name:
@@ -46,75 +62,15 @@ Brand profile (locked — use this identity):
 - Tagline: {brand_tagline or "(none)"}
 - About: {brand_description or "(none)"}
 """
+    style_hint = IMAGE_STYLE_PROMPT_HINTS.get(image_style, "")
+    style_block = f"\n{style_hint}\n" if style_hint else ""
     return f"""Source URL: {url}
 Page title: {title}
 Page type hint: {page_type_hint}
-{brand_block}
+{brand_block}{style_block}
 Page text:
 ---
 {text}
----
-""".strip()
-
-
-VARIANT_SYSTEM_PROMPT = f"""You propose color/accent CSS variable sets for an existing social-post design.
-The design may be a single-page template OR a multi-page pack (ordered page templates sharing one palette).
-Layout and fonts are LOCKED — you must ONLY propose CSS custom properties (colors / accent shape colors).
-Do not suggest fonts, spacing, or structural changes.
-
-{STYLE_GUIDE}
-
-Return ONLY valid JSON:
-{{
-  "variants": [
-    {{
-      "id": "snake_case_name",
-      "label": "Human label",
-      "css_vars": {{
-        "--bg": "#hex",
-        "--text": "#hex",
-        "--accent": "#hex",
-        "--accent-shape": "#hex"
-      }}
-    }}
-  ]
-}}
-
-Use distinct but on-brand palettes. Keep contrast readable (text on bg).
-You MUST include every --* color key listed in "Required CSS keys" (and any extras you see in the HTML), but never font-* properties.
-""".strip()
-
-
-def build_variant_user_prompt(
-    *,
-    design_html: str,
-    count: int,
-    design_label: str = "template",
-    required_css_keys: list[str] | None = None,
-    brand_name: str = "",
-    brand_tagline: str = "",
-    brand_description: str = "",
-) -> str:
-    snippet = design_html
-    if len(snippet) > 12000:
-        snippet = snippet[:12000] + "\n<!-- truncated -->"
-    keys = required_css_keys or []
-    keys_block = ", ".join(keys) if keys else "(infer from HTML :root)"
-    brand_block = ""
-    if brand_name:
-        brand_block = f"""
-Brand (bias palettes toward this voice; do not invent a different brand):
-- Name: {brand_name}
-- Tagline: {brand_tagline or "(none)"}
-- About: {brand_description or "(none)"}
-"""
-    return f"""Propose exactly {count} color variants for this {design_label}.
-
-Required CSS keys (include ALL of these in every variant.css_vars): {keys_block}
-{brand_block}
-Design HTML/CSS:
----
-{snippet}
 ---
 """.strip()
 
@@ -246,6 +202,7 @@ def build_carousel_user_prompt(
     brand_name: str = "",
     brand_tagline: str = "",
     brand_description: str = "",
+    image_style: str = "",
 ) -> str:
     schema_json = json.dumps(page_schema, indent=2)
     locked_name = brand_name or default_brand or ""
@@ -260,11 +217,13 @@ Set JSON "brand" and every slide's brand field to exactly: {locked_name}
 """
     elif default_brand:
         brand_block = f"\nDefault brand name (use if no better fit): {default_brand}\n"
+    style_hint = IMAGE_STYLE_PROMPT_HINTS.get(image_style, "")
+    style_block = f"\n{style_hint}\n" if style_hint else ""
     return f"""Source URL: {url}
 Page title: {title}
 Page type hint: {page_type_hint}
 Pack: {pack_id} ({pack_label})
-{brand_block}
+{brand_block}{style_block}
 Pack page schema (fill every page_id, only listed fields):
 {schema_json}
 

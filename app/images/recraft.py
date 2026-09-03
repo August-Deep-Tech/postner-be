@@ -6,7 +6,9 @@ import httpx
 from app.config import Settings
 
 
-async def generate_recraft_image_bytes(*, prompt: str, settings: Settings) -> bytes:
+async def generate_recraft_image_bytes(
+    *, prompt: str, settings: Settings, style: str | None = None
+) -> bytes:
     """Generate an image with Recraft V3 via fal.ai and return PNG/JPEG bytes."""
     if not settings.fal_key:
         raise RuntimeError("FAL_KEY is not set")
@@ -15,12 +17,13 @@ async def generate_recraft_image_bytes(*, prompt: str, settings: Settings) -> by
 
     os.environ.setdefault("FAL_KEY", settings.fal_key)
 
+    arguments: dict[str, str] = {"prompt": prompt, "image_size": "square_hd"}
+    if style:
+        arguments["style"] = style
+
     result = await fal_client.run_async(
         settings.recraft_model,
-        arguments={
-            "prompt": prompt,
-            "image_size": "square_hd",
-        },
+        arguments=arguments,
     )
 
     images = result.get("images") or []

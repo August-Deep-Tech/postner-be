@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 from sqlalchemy.orm import Session
 
 from app.auth.deps import AuthContext, get_current_auth
-from app.config import Settings, SocialFormat, get_settings
+from app.config import ImageStyle, Settings, SocialFormat, get_settings
 from app.db.models import Post
 from app.db.session import get_db
 from app.models.schemas import CarouselSlide
@@ -55,7 +55,7 @@ class CreatePostRequest(BaseModel):
     pack_id: str | None = None
     template_id: str | None = None
     format: SocialFormat | None = None
-    variant_id: str | None = None
+    image_style: ImageStyle | None = None
     with_images: bool = False
 
     @model_validator(mode="after")
@@ -90,8 +90,7 @@ class ResizeRequest(BaseModel):
 
 
 class RedesignRequest(BaseModel):
-    variant_id: str | None = None
-    propose: bool = False
+    image_style: ImageStyle | None = None
     regenerate_images: bool = False
     recompose: bool = True
 
@@ -143,7 +142,7 @@ class PostResponse(BaseModel):
     format: str
     pack_id: str | None
     template_id: str | None
-    variant_id: str | None
+    image_style: str
     content: dict[str, Any]
     images: dict[str, Any]
     composed: dict[str, Any]
@@ -188,7 +187,7 @@ def _post_response(post: Post, *, include_html: bool = True) -> PostResponse:
         format=post.format,
         pack_id=post.pack_id,
         template_id=post.template_id,
-        variant_id=post.variant_id,
+        image_style=post.image_style,
         content=post.content or {},
         images=post.images or {},
         composed=composed,
@@ -231,7 +230,7 @@ async def create_post(
         pack_id=body.pack_id,
         template_id=body.template_id,
         format_name=body.format,
-        variant_id=body.variant_id,
+        image_style=body.image_style,
         with_images=body.with_images,
         settings=settings,
     )
@@ -360,8 +359,7 @@ async def post_redesign(
     post = await post_service.redesign_post(
         db,
         post=post,
-        variant_id=body.variant_id,
-        propose=body.propose,
+        image_style=body.image_style,
         regenerate_images=body.regenerate_images,
         recompose=body.recompose,
         settings=settings,

@@ -9,7 +9,7 @@ from typing import Any
 
 from app.config import Settings, SocialFormat
 from app.templates.engine import (
-    apply_color_variant,
+    apply_css_vars,
     ensure_locked_font,
     fill_placeholders,
 )
@@ -135,16 +135,12 @@ def render_pack_page_html(
     fields: dict[str, str],
     settings: Settings,
     image_urls: list[str] | None = None,
-    variant_css: dict[str, str] | None = None,
 ) -> str:
     html = load_pack_page_html(pack, page)
     html = ensure_locked_font(html, settings)
 
-    css = dict(pack.css_vars)
-    if variant_css:
-        css.update(variant_css)
-    if css:
-        html = apply_color_variant(html, css)
+    if pack.css_vars:
+        html = apply_css_vars(html, pack.css_vars)
 
     values = {k: "" for k in page.fields}
     values.update({k: str(v) for k, v in fields.items() if v is not None})
