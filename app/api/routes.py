@@ -56,6 +56,7 @@ async def packs() -> ListPacksResponse:
                 id=pack.id,
                 label=pack.label,
                 format=pack.format,
+                formats=pack.formats,
                 pages=len(pack.sequence),
                 images=pack.total_images(),
                 description=pack.description,

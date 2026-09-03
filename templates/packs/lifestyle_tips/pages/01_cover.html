@@ -7,6 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
+      --canvas-w: 1080px;
+      --canvas-h: 1350px;
       --bg: #F7F4EE;
       --text: #2A2623;
       --font-serif: "Playfair Display", Georgia, serif;
@@ -14,37 +16,88 @@
       --font-script: "Great Vibes", cursive;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    html, body { width: var(--canvas-w); height: var(--canvas-h); overflow: hidden; background: var(--bg); }
     #canvas {
-      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
-      position: relative; padding: 88px 0 72px 88px;
+      width: var(--canvas-w); height: var(--canvas-h); background: var(--bg); color: var(--text);
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      grid-template-rows: 1fr auto;
+      gap: clamp(20px, 3cqw, 48px);
+      align-items: center;
+      padding: clamp(48px, 6.5cqh, 88px) clamp(36px, 6.5cqw, 72px) clamp(36px, 5.5cqh, 72px);
+      position: relative;
+      container-type: size;
+      container-name: canvas;
     }
     .copy {
-      margin-top: 120px; max-width: 620px; position: relative; z-index: 2;
+      grid-column: 1; grid-row: 1;
+      max-width: 100%; min-width: 0; z-index: 2;
+      display: flex; flex-direction: column; justify-content: center;
+      padding-right: clamp(8px, 1.5cqw, 24px);
     }
     .script {
-      font-family: var(--font-script); font-weight: 400; font-size: 64px;
-      line-height: 1; margin-bottom: 18px;
+      font-family: var(--font-script); font-weight: 400;
+      font-size: clamp(36px, 5cqh, 64px);
+      line-height: 1; margin-bottom: clamp(10px, 1.4cqh, 18px);
     }
     .title {
-      font-family: var(--font-serif); font-weight: 700; font-size: 78px;
+      font-family: var(--font-serif); font-weight: 700;
+      font-size: clamp(42px, 6.2cqh, 78px);
       line-height: 1.02; letter-spacing: -0.01em; text-transform: uppercase;
       white-space: pre-line;
     }
     .peek {
-      position: absolute; top: 280px; right: -120px; width: 420px; height: 720px;
-      border-radius: 48px; overflow: hidden; z-index: 1;
+      grid-column: 2; grid-row: 1;
+      width: 100%;
+      height: min(55cqh, 720px);
+      max-height: 100%;
+      border-radius: clamp(28px, 4cqw, 48px);
+      overflow: hidden; z-index: 1; justify-self: stretch; align-self: center;
     }
     .peek img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .pill {
-      position: absolute; right: 72px; bottom: 72px;
-      font-family: var(--font-sans); font-weight: 500; font-size: 20px;
+      grid-column: 1 / -1; grid-row: 2;
+      justify-self: end;
+      margin-top: clamp(12px, 2cqh, 28px);
+      font-family: var(--font-sans); font-weight: 500;
+      font-size: clamp(14px, 1.6cqh, 20px);
       letter-spacing: 0.18em; text-transform: uppercase;
       border: 2px solid var(--text); border-radius: 999px;
-      padding: 16px 36px; display: inline-flex; align-items: center; gap: 18px;
+      padding: clamp(10px, 1.2cqh, 16px) clamp(22px, 3.2cqw, 36px);
+      display: inline-flex; align-items: center; gap: clamp(10px, 1.5cqw, 18px);
       background: var(--bg); z-index: 3;
     }
-    .pill .arrow { font-size: 28px; line-height: 1; }
+    .pill .arrow { font-size: clamp(20px, 2.2cqh, 28px); line-height: 1; }
+
+    @container canvas (min-aspect-ratio: 4/3) {
+      #canvas {
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: clamp(16px, 2.5cqw, 36px);
+        padding-block: clamp(28px, 5cqh, 56px);
+      }
+      .title { font-size: clamp(34px, 7.2cqh, 64px); }
+      .script { font-size: clamp(28px, 5.5cqh, 48px); }
+      .peek { height: min(70cqh, 560px); }
+    }
+
+    @container canvas (max-aspect-ratio: 9/16) {
+      #canvas {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto;
+        align-items: stretch;
+        padding-top: clamp(64px, 7cqh, 120px);
+      }
+      .copy { grid-column: 1; grid-row: 1; padding-right: 0; }
+      .peek {
+        grid-column: 1; grid-row: 2;
+        width: min(78cqw, 100%);
+        height: min(42cqh, 640px);
+        justify-self: end;
+      }
+      .pill { grid-column: 1; grid-row: 3; }
+      .title { font-size: clamp(48px, 5.8cqh, 96px); }
+      .script { font-size: clamp(40px, 4.2cqh, 72px); }
+    }
   </style>
 </head>
 <body>

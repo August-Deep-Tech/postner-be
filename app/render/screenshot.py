@@ -31,16 +31,11 @@ async def screenshot_html(
             await page.wait_for_timeout(500)
             await page.evaluate("() => document.fonts.ready")
 
-            root = page.locator("#canvas, .post, body").first
+            root = page.locator("#canvas")
             box = await root.bounding_box()
-            if box and box["width"] > 0 and box["height"] > 0:
-                await root.screenshot(path=str(dest), type="png")
-            else:
-                await page.screenshot(
-                    path=str(dest),
-                    type="png",
-                    clip={"x": 0, "y": 0, "width": width, "height": height},
-                )
+            if not box or box["width"] <= 0 or box["height"] <= 0:
+                raise RuntimeError("Template must provide a visible #canvas element")
+            await root.screenshot(path=str(dest), type="png")
 
             if failed_requests:
                 dest.unlink(missing_ok=True)

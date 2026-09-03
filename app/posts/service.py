@@ -19,6 +19,7 @@ from app.config import (
     RECRAFT_STYLE_BY_IMAGE_STYLE,
     Settings,
     SocialFormat,
+    get_size,
     has_llm_credentials,
 )
 from app.db.models import Brand, Feedback, Post, PostRevision
@@ -71,6 +72,18 @@ def _resolve_format(
     if pack_fallback:
         return pack_fallback
     return "ig_feed"
+
+
+def _require_pack_format(pack, format_name: SocialFormat) -> None:
+    allowed = list(getattr(pack, "formats", []) or [pack.format])
+    if format_name not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Format '{format_name}' is not supported by pack '{pack.id}'. "
+                f"Allowed: {', '.join(allowed)}"
+            ),
+        )
 
 
 def _new_run_id() -> str:
@@ -339,6 +352,7 @@ async def create_draft_post(
             brand_row=brand_row,
             pack_fallback=pack.format,
         )
+        _require_pack_format(pack, fmt)
         try:
             carousel = await generate_carousel(
                 page,
@@ -604,6 +618,7 @@ def _fill_pages_html(
                     pack=pack,
                     page=page_def,
                     fields=fields,
+                    format_name=post.format,  # type: ignore[arg-type]
                     settings=settings,
                     image_urls=page_images,
                 )
@@ -611,6 +626,7 @@ def _fill_pages_html(
                     "index": index,
                     "html": f"filled_{index:02d}_{page_def.id}.html",
                     "html_source": html_source,
+                    "format": post.format,
                 }
             return filled
 
@@ -630,12 +646,20 @@ def _fill_pages_html(
             caption=content.get("overlay_text") or "",
             image_url=image_url,
             cta_link=post.url,
+            format_name=post.format,  # type: ignore[arg-type]
             settings=settings,
             brand=brand_name,
             tagline=tagline,
             logo_url=logo_url,
         )
-        return {"main": {"index": 1, "html": "filled.html", "html_source": html_source}}
+        return {
+            "main": {
+                "index": 1,
+                "html": "filled.html",
+                "html_source": html_source,
+                "format": post.format,
+            }
+        }
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except HTTPException:
@@ -647,11 +671,14 @@ def _fill_pages_html(
 def _merge_filled_entry(
     page_id: str, rendered: dict[str, Any], prior: dict[str, Any] | None
 ) -> dict[str, Any]:
+    width, height = get_size(rendered["format"])  # type: ignore[arg-type]
     entry: dict[str, Any] = {
         "index": rendered["index"],
         "page_id": page_id,
         "html": rendered["html"],
         "html_source": rendered["html_source"],
+        "width": width,
+        "height": height,
     }
     if prior and "videos" in prior:
         entry["videos"] = prior["videos"]
@@ -907,11 +934,14 @@ async def resize_post(
     apply_to_post: bool,
     settings: Settings,
 ) -> Post:
+    pack = load_pack(post.pack_id, settings) if post.pack_id else None
     if post.brand_id:
         brand_row = db.get(Brand, post.brand_id)
         if brand_row is not None:
             # Validate against brand.formats (raises 400 if not allowed)
             _resolve_format(format_name=format_name, brand_row=brand_row)
+    if pack is not None:
+        _require_pack_format(pack, format_name)
     if apply_to_post:
         post.format = format_name
     # Re-compose into current or keep format on post for render
@@ -925,6 +955,17 @@ async def resize_post(
         settings=settings,
         record_revision=False,
     )
+    composed = dict(post.composed or {})
+    targeted = set(pages) if pages else None
+    refreshed_pages: list[dict[str, Any]] = []
+    for item in list(composed.get("pages") or []):
+        page = dict(item)
+        if targeted is None or page.get("page_id") in targeted:
+            page.pop("url", None)
+            page.pop("key", None)
+        refreshed_pages.append(page)
+    composed["pages"] = refreshed_pages
+    post.composed = composed
     if not apply_to_post:
         post.format = original
     _add_revision(

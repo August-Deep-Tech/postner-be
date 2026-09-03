@@ -60,9 +60,10 @@ async def render_html_video(
                     }"""
                 )
 
-                root = page.locator("#canvas, .post, body").first
+                root = page.locator("#canvas")
                 box = await root.bounding_box()
-                use_root = bool(box and box["width"] > 0 and box["height"] > 0)
+                if not box or box["width"] <= 0 or box["height"] <= 0:
+                    raise RuntimeError("Template must provide a visible #canvas element")
 
                 for i in range(frame_count):
                     t_ms = (i / fps) * 1000.0
@@ -76,14 +77,7 @@ async def render_html_video(
                         t_ms,
                     )
                     frame_path = frames_dir / f"frame_{i:04d}.png"
-                    if use_root:
-                        await root.screenshot(path=str(frame_path), type="png")
-                    else:
-                        await page.screenshot(
-                            path=str(frame_path),
-                            type="png",
-                            clip={"x": 0, "y": 0, "width": width, "height": height},
-                        )
+                    await root.screenshot(path=str(frame_path), type="png")
             finally:
                 await browser.close()
 

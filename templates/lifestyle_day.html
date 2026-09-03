@@ -11,6 +11,8 @@
   />
   <style>
     :root {
+      --canvas-w: 1080px;
+      --canvas-h: 1920px;
       --bg: #1a1a1a;
       --text: #fff6c8;
       --accent: #ffffff;
@@ -29,20 +31,22 @@
 
     html,
     body {
-      width: 1080px;
-      height: 1920px;
+      width: var(--canvas-w);
+      height: var(--canvas-h);
       overflow: hidden;
       background: var(--bg);
     }
 
     #canvas {
       position: relative;
-      width: 1080px;
-      height: 1920px;
+      width: var(--canvas-w);
+      height: var(--canvas-h);
       overflow: hidden;
       background: var(--bg);
       color: var(--text);
       font-family: var(--font-family);
+      container-type: size;
+      container-name: canvas;
     }
 
     .hero {
@@ -83,7 +87,7 @@
       position: absolute;
       inset: 0;
       z-index: 2;
-      padding: 160px 72px 120px;
+      padding: clamp(80px, 8cqh, 160px) clamp(36px, 6.5cqw, 72px) clamp(64px, 6cqh, 120px);
       display: grid;
       grid-template-rows: 1fr 1fr 1fr 1fr;
       align-items: center;
@@ -170,6 +174,49 @@
       stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
+    }
+
+    @container canvas (min-aspect-ratio: 4/3) {
+      .stage {
+        grid-template-rows: 1fr 1fr;
+        grid-template-columns: 1fr 1fr;
+        gap: clamp(14px, 2.2cqh, 30px);
+      }
+      .row.left,
+      .row.mid-left {
+        align-items: flex-start;
+        text-align: left;
+        padding-right: 10%;
+        padding-left: 0;
+        margin-top: 0;
+      }
+      .row.right,
+      .row.mid-right {
+        align-items: flex-end;
+        text-align: right;
+        padding-left: 10%;
+        padding-right: 0;
+        margin-top: 0;
+      }
+      .word-block {
+        font-size: clamp(44px, 8.8cqh, 110px);
+      }
+      .pill {
+        font-size: clamp(14px, 2.8cqh, 20px);
+      }
+    }
+
+    @container canvas (max-aspect-ratio: 9/16) {
+      .stage {
+        padding-top: clamp(110px, 10.2cqh, 220px);
+        padding-bottom: clamp(80px, 8.5cqh, 160px);
+      }
+      .word-block {
+        font-size: clamp(78px, 9.5cqh, 164px);
+      }
+      .pill {
+        font-size: clamp(18px, 2.2cqh, 28px);
+      }
     }
 
     .pill span {

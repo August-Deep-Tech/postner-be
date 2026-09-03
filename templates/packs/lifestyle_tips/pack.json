@@ -2,6 +2,14 @@
   "id": "lifestyle_tips",
   "label": "Lifestyle Tips",
   "format": "ig_portrait",
+  "formats": [
+    "ig_feed",
+    "ig_portrait",
+    "ig_story",
+    "tiktok",
+    "fb_post",
+    "x_post"
+  ],
   "description": "4-page cream editorial carousel: cover peek + two tip spreads + closing handle. Warm neutrals, serif + script + sans. One lifestyle photo per page.",
   "default_brand": "",
   "css_vars": {

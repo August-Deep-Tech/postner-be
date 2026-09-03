@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from app.config import Settings
+from app.config import Settings, SocialFormat, get_size
 
 
 PLACEHOLDER_CAPTION = "{{caption}}"
@@ -172,6 +172,7 @@ def render_filled_html(
     caption: str,
     image_url: str,
     cta_link: str,
+    format_name: SocialFormat,
     settings: Settings,
     brand: str = "",
     tagline: str = "",
@@ -179,6 +180,14 @@ def render_filled_html(
 ) -> str:
     html = load_template_html(template_id, settings)
     html = ensure_locked_font(html, settings)
+    width, height = get_size(format_name)
+    html = apply_css_vars(
+        html,
+        {
+            "--canvas-w": f"{width}px",
+            "--canvas-h": f"{height}px",
+        },
+    )
     return fill_template(
         html,
         caption=caption,

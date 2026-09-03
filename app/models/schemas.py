@@ -83,6 +83,7 @@ class PackSummary(BaseModel):
     id: str
     label: str
     format: SocialFormat
+    formats: list[SocialFormat]
     pages: int
     images: int
     description: str = ""
