@@ -12,11 +12,9 @@ from app.generate.prompts import (
     CAROUSEL_SYSTEM_PROMPT,
     PACK_PROPOSE_SYSTEM_PROMPT,
     POST_SYSTEM_PROMPT,
-    VARIANT_SYSTEM_PROMPT,
     build_carousel_user_prompt,
     build_pack_propose_user_prompt,
     build_post_user_prompt,
-    build_variant_user_prompt,
 )
 from app.models.schemas import CarouselSlide, GeneratedCarousel, GeneratedPost
 from app.scrape.page import ScrapedPage
@@ -45,6 +43,7 @@ async def generate_post(
     brand_name: str = "",
     brand_tagline: str = "",
     brand_description: str = "",
+    image_style: str = "",
 ) -> GeneratedPost:
     _ensure_llm_keys(settings)
     response = await litellm.acompletion(
@@ -61,6 +60,7 @@ async def generate_post(
                     brand_name=brand_name,
                     brand_tagline=brand_tagline,
                     brand_description=brand_description,
+                    image_style=image_style,
                 ),
             },
         ],
@@ -80,6 +80,7 @@ async def generate_carousel(
     brand_name: str = "",
     brand_tagline: str = "",
     brand_description: str = "",
+    image_style: str = "",
 ) -> GeneratedCarousel:
     _ensure_llm_keys(settings)
     response = await litellm.acompletion(
@@ -100,6 +101,7 @@ async def generate_carousel(
                     brand_name=brand_name,
                     brand_tagline=brand_tagline,
                     brand_description=brand_description,
+                    image_style=image_style,
                 ),
             },
         ],
@@ -143,46 +145,6 @@ async def generate_carousel(
     elif not carousel.brand:
         carousel.brand = pack.default_brand
     return carousel
-
-
-async def propose_variant_palettes(
-    *,
-    design_html: str,
-    count: int,
-    settings: Settings,
-    design_label: str = "template",
-    required_css_keys: list[str] | None = None,
-    brand_name: str = "",
-    brand_tagline: str = "",
-    brand_description: str = "",
-) -> list[dict[str, Any]]:
-    _ensure_llm_keys(settings)
-    response = await litellm.acompletion(
-        model=resolve_llm_model(settings),
-        messages=[
-            {"role": "system", "content": VARIANT_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": build_variant_user_prompt(
-                    design_html=design_html,
-                    count=count,
-                    design_label=design_label,
-                    required_css_keys=required_css_keys,
-                    brand_name=brand_name,
-                    brand_tagline=brand_tagline,
-                    brand_description=brand_description,
-                ),
-            },
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.8,
-    )
-    raw = response.choices[0].message.content or "{}"
-    data = _extract_json(raw)
-    variants = data.get("variants", data if isinstance(data, list) else [])
-    if not isinstance(variants, list):
-        raise ValueError("LLM did not return a variants list")
-    return variants
 
 
 async def propose_pack_structures(

@@ -24,19 +24,23 @@ async def screenshot_html(
                 viewport={"width": width, "height": height},
                 device_scale_factor=1,
             )
+            failed_requests: list[str] = []
+            page.on("requestfailed", lambda r: failed_requests.append(r.url))
+
             await page.set_content(html, wait_until="networkidle")
             await page.wait_for_timeout(500)
             await page.evaluate("() => document.fonts.ready")
 
-            root = page.locator("#canvas, .post, body").first
+            root = page.locator("#canvas")
             box = await root.bounding_box()
-            if box and box["width"] > 0 and box["height"] > 0:
-                await root.screenshot(path=str(dest), type="png")
-            else:
-                await page.screenshot(
-                    path=str(dest),
-                    type="png",
-                    clip={"x": 0, "y": 0, "width": width, "height": height},
+            if not box or box["width"] <= 0 or box["height"] <= 0:
+                raise RuntimeError("Template must provide a visible #canvas element")
+            await root.screenshot(path=str(dest), type="png")
+
+            if failed_requests:
+                dest.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"Assets failed to load during render: {failed_requests}"
                 )
         finally:
             await browser.close()

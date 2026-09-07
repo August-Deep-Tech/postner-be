@@ -7,6 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
+      --canvas-w: 1080px;
+      --canvas-h: 1350px;
       --bg: #F3F0E8;
       --text: #0B0B0B;
       --accent: #3B6FD8;
@@ -16,11 +18,14 @@
       --font-sans: "Inter", system-ui, sans-serif;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    html, body { width: var(--canvas-w); height: var(--canvas-h); overflow: hidden; background: var(--bg); }
     #canvas {
-      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
+      width: var(--canvas-w); height: var(--canvas-h); background: var(--bg); color: var(--text);
       display: flex; flex-direction: column; align-items: center;
-      padding: 110px 100px 120px; text-align: center;
+      padding: clamp(58px, 8.2cqh, 110px) clamp(30px, 9.2cqw, 100px) clamp(52px, 8.8cqh, 120px);
+      text-align: center;
+      container-type: size;
+      container-name: canvas;
     }
     .brand {
       font-family: var(--font-sans); font-weight: 700; font-size: 28px;
@@ -32,14 +37,25 @@
       max-width: 880px; margin-top: -20px;
     }
     .title {
-      font-family: var(--font-serif); font-weight: 600; font-size: 88px;
+      font-family: var(--font-serif); font-weight: 600; font-size: clamp(42px, 7.8cqh, 88px);
       line-height: 1.08; letter-spacing: -0.02em; white-space: pre-line;
     }
     .cta {
-      font-family: var(--font-sans); font-weight: 700; font-size: 26px;
+      font-family: var(--font-sans); font-weight: 700; font-size: clamp(17px, 2.2cqh, 26px);
       letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
       white-space: pre-line; line-height: 1.45; max-width: 760px;
       margin-top: auto; padding-bottom: 8px;
+    }
+
+    @container canvas (min-aspect-ratio: 4/3) {
+      .main { max-width: 72cqw; margin-top: 0; }
+      .cta { max-width: 66cqw; }
+    }
+
+    @container canvas (max-aspect-ratio: 9/16) {
+      .main { max-width: 84cqw; margin-top: 0; }
+      .title { font-size: clamp(54px, 7.5cqh, 120px); }
+      .cta { font-size: clamp(20px, 2.4cqh, 34px); max-width: 80cqw; }
     }
   </style>
 </head>

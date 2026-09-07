@@ -2,6 +2,14 @@
   "id": "gentle_reminders",
   "label": "Gentle Reminders",
   "format": "ig_portrait",
+  "formats": [
+    "ig_feed",
+    "ig_portrait",
+    "ig_story",
+    "tiktok",
+    "fb_post",
+    "x_post"
+  ],
   "description": "6-page editorial carousel (text-only). Cream + royal blue, serif headlines, sans body.",
   "default_brand": "",
   "css_vars": {

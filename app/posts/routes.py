@@ -4,18 +4,17 @@ import re
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 from sqlalchemy.orm import Session
 
 from app.auth.deps import AuthContext, get_current_auth
-from app.config import Settings, SocialFormat, get_settings
+from app.config import ImageStyle, Settings, SocialFormat, get_settings
 from app.db.models import Post
 from app.db.session import get_db
 from app.models.schemas import CarouselSlide
 from app.posts import service as post_service
-from app.posts.preview import enrich_composed_with_html, page_preview_html
+from app.posts.preview import enrich_composed_with_html, strip_composed_html
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -56,7 +55,7 @@ class CreatePostRequest(BaseModel):
     pack_id: str | None = None
     template_id: str | None = None
     format: SocialFormat | None = None
-    variant_id: str | None = None
+    image_style: ImageStyle | None = None
     with_images: bool = False
 
     @model_validator(mode="after")
@@ -91,8 +90,7 @@ class ResizeRequest(BaseModel):
 
 
 class RedesignRequest(BaseModel):
-    variant_id: str | None = None
-    propose: bool = False
+    image_style: ImageStyle | None = None
     regenerate_images: bool = False
     recompose: bool = True
 
@@ -144,8 +142,7 @@ class PostResponse(BaseModel):
     format: str
     pack_id: str | None
     template_id: str | None
-    variant_id: str | None
-    asset_dir: str
+    image_style: str
     content: dict[str, Any]
     images: dict[str, Any]
     composed: dict[str, Any]
@@ -179,7 +176,8 @@ class ListRevisionsResponse(BaseModel):
     revisions: list[RevisionItem]
 
 
-def _post_response(post: Post) -> PostResponse:
+def _post_response(post: Post, *, include_html: bool = True) -> PostResponse:
+    composed = enrich_composed_with_html(post) if include_html else strip_composed_html(post)
     return PostResponse(
         id=str(post.id),
         tenant_id=str(post.tenant_id),
@@ -189,11 +187,10 @@ def _post_response(post: Post) -> PostResponse:
         format=post.format,
         pack_id=post.pack_id,
         template_id=post.template_id,
-        variant_id=post.variant_id,
-        asset_dir=post.asset_dir,
+        image_style=post.image_style,
         content=post.content or {},
         images=post.images or {},
-        composed=enrich_composed_with_html(post),
+        composed=composed,
         meta=post.meta or {},
         created_at=post.created_at.isoformat() if post.created_at else "",
         updated_at=post.updated_at.isoformat() if post.updated_at else "",
@@ -202,11 +199,20 @@ def _post_response(post: Post) -> PostResponse:
 
 @router.get("", response_model=ListPostsResponse)
 def list_posts(
+    include: str | None = None,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
 ) -> ListPostsResponse:
+    """List posts. Pass ?include=html to embed each page's preview markup.
+
+    Full HTML is omitted by default: a queue load can be dozens of posts,
+    each with several pages, and most callers only need metadata.
+    """
     posts = post_service.list_posts(db, auth.tenant_id)
-    return ListPostsResponse(posts=[_post_response(p) for p in posts])
+    include_html = include == "html"
+    return ListPostsResponse(
+        posts=[_post_response(p, include_html=include_html) for p in posts]
+    )
 
 
 @router.post("", response_model=PostResponse)
@@ -224,7 +230,7 @@ async def create_post(
         pack_id=body.pack_id,
         template_id=body.template_id,
         format_name=body.format,
-        variant_id=body.variant_id,
+        image_style=body.image_style,
         with_images=body.with_images,
         settings=settings,
     )
@@ -239,28 +245,6 @@ def get_post(
 ) -> PostResponse:
     post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
     return _post_response(post)
-
-
-@router.get("/{post_id}/pages/{page_id}/html", response_class=HTMLResponse)
-def get_page_preview_html(
-    post_id: uuid.UUID,
-    page_id: str,
-    auth: AuthContext = Depends(get_current_auth),
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """Browser-ready filled HTML for iframe / srcdoc (images inlined as data URIs)."""
-    post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
-    pages = list((post.composed or {}).get("pages") or [])
-    page = next((p for p in pages if str(p.get("page_id")) == page_id), None)
-    if page is None:
-        raise HTTPException(status_code=404, detail=f"Page '{page_id}' not found")
-    html = page_preview_html(post, page)
-    if not html:
-        raise HTTPException(
-            status_code=404,
-            detail="Filled HTML not found; call POST /posts/{id}/compose first",
-        )
-    return HTMLResponse(content=html, media_type="text/html; charset=utf-8")
 
 
 @router.post("/{post_id}/images", response_model=PostResponse)
@@ -375,8 +359,7 @@ async def post_redesign(
     post = await post_service.redesign_post(
         db,
         post=post,
-        variant_id=body.variant_id,
-        propose=body.propose,
+        image_style=body.image_style,
         regenerate_images=body.regenerate_images,
         recompose=body.recompose,
         settings=settings,
@@ -457,11 +440,12 @@ def get_revisions(
 
 
 @router.post("/{post_id}/undo", response_model=PostResponse)
-def post_undo(
+async def post_undo(
     post_id: uuid.UUID,
     auth: AuthContext = Depends(get_current_auth),
     db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> PostResponse:
     post = post_service.get_post_for_tenant(db, auth.tenant_id, post_id)
-    post = post_service.undo_post(db, post)
+    post = await post_service.undo_post(db, post, settings=settings)
     return _post_response(post)

@@ -25,7 +25,6 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY templates ./templates
-COPY variants ./variants
 COPY brands ./brands
 
 EXPOSE 8000

@@ -7,6 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
+      --canvas-w: 1080px;
+      --canvas-h: 1350px;
       --bg: #F7F4EE;
       --text: #2A2623;
       --font-serif: "Playfair Display", Georgia, serif;
@@ -14,43 +16,79 @@
       --font-script: "Great Vibes", cursive;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    html, body { width: var(--canvas-w); height: var(--canvas-h); overflow: hidden; background: var(--bg); }
     #canvas {
-      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
-      position: relative; padding: 88px 72px 72px;
+      width: var(--canvas-w); height: var(--canvas-h); background: var(--bg); color: var(--text);
+      position: relative;
+      padding: clamp(48px, 6.5cqh, 88px) clamp(36px, 6.5cqw, 72px) clamp(36px, 5.5cqh, 72px);
       display: flex; flex-direction: column;
+      container-type: size;
+      container-name: canvas;
     }
     .row {
       flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr;
-      gap: 48px; align-items: center; margin-top: 72px; min-height: 0;
+      gap: clamp(24px, 4cqw, 48px); align-items: center;
+      margin-top: clamp(24px, 5cqh, 72px); min-height: 0;
     }
     .photo {
-      width: 100%; height: 820px; border-radius: 40px; overflow: hidden;
+      width: 100%; height: min(62cqh, 820px); min-height: 0;
+      border-radius: clamp(24px, 3.5cqw, 40px); overflow: hidden;
     }
     .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .copy { padding-right: 8px; }
+    .copy { padding-right: clamp(4px, 0.8cqw, 8px); min-width: 0; }
     .num {
-      font-family: var(--font-script); font-size: 92px; line-height: 1;
-      margin-bottom: 12px;
+      font-family: var(--font-script);
+      font-size: clamp(48px, 7cqh, 92px); line-height: 1;
+      margin-bottom: clamp(8px, 1cqh, 12px);
     }
     .title {
-      font-family: var(--font-serif); font-weight: 700; font-size: 52px;
+      font-family: var(--font-serif); font-weight: 700;
+      font-size: clamp(28px, 4.2cqh, 52px);
       line-height: 1.05; text-transform: uppercase; white-space: pre-line;
-      margin-bottom: 28px;
+      margin-bottom: clamp(14px, 2cqh, 28px);
     }
     .body {
-      font-family: var(--font-sans); font-weight: 400; font-size: 26px;
-      line-height: 1.45; white-space: pre-line; max-width: 420px;
+      font-family: var(--font-sans); font-weight: 400;
+      font-size: clamp(18px, 2.1cqh, 26px);
+      line-height: 1.45; white-space: pre-line; max-width: min(100%, 420px);
     }
     .pill {
-      position: absolute; right: 72px; bottom: 72px;
-      font-family: var(--font-sans); font-weight: 500; font-size: 20px;
+      align-self: flex-end; margin-top: clamp(12px, 2cqh, 24px);
+      font-family: var(--font-sans); font-weight: 500;
+      font-size: clamp(14px, 1.6cqh, 20px);
       letter-spacing: 0.12em; text-transform: uppercase;
       border: 2px solid var(--text); border-radius: 999px;
-      padding: 14px 32px; display: inline-flex; align-items: center; gap: 16px;
+      padding: clamp(10px, 1.1cqh, 14px) clamp(20px, 3cqw, 32px);
+      display: inline-flex; align-items: center; gap: clamp(10px, 1.4cqw, 16px);
       background: var(--bg);
     }
-    .pill .arrow { font-size: 26px; line-height: 1; }
+    .pill .arrow { font-size: clamp(18px, 2cqh, 26px); line-height: 1; }
+
+    @container canvas (min-aspect-ratio: 4/3) {
+      #canvas { padding-block: clamp(28px, 5cqh, 56px); }
+      .row {
+        grid-template-columns: 0.9fr 1.1fr;
+        margin-top: clamp(12px, 2.5cqh, 32px);
+        gap: clamp(18px, 3cqw, 36px);
+      }
+      .photo { height: min(70cqh, 560px); }
+      .title { font-size: clamp(24px, 5.5cqh, 44px); }
+      .body { font-size: clamp(16px, 3cqh, 22px); max-width: 100%; }
+      .num { font-size: clamp(36px, 8cqh, 72px); }
+    }
+
+    @container canvas (max-aspect-ratio: 9/16) {
+      #canvas { padding-top: clamp(64px, 7cqh, 110px); }
+      .row {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 0.95fr) auto;
+        margin-top: clamp(16px, 2.5cqh, 40px);
+      }
+      .photo { height: min(38cqh, 640px); order: -1; }
+      .title { font-size: clamp(32px, 4cqh, 64px); }
+      .body { font-size: clamp(20px, 2cqh, 30px); max-width: 90cqw; }
+      .num { font-size: clamp(52px, 6cqh, 100px); }
+    }
   </style>
 </head>
 <body>

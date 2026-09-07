@@ -2,46 +2,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from app.config import SocialFormat
-
-
-class ProposeVariantsRequest(BaseModel):
-    brand_id: str
-    template_id: str | None = None
-    pack_id: str | None = None
-    count: int = Field(default=3, ge=1, le=8)
-
-    @model_validator(mode="after")
-    def _template_or_pack(self) -> ProposeVariantsRequest:
-        if self.pack_id and self.template_id:
-            raise ValueError("Provide only one of template_id or pack_id")
-        if not self.pack_id and not self.template_id:
-            self.template_id = "default"
-        return self
 
 
 class ProposePacksRequest(BaseModel):
     brand_id: str | None = None
     format: SocialFormat = "ig_portrait"
     count: int = Field(default=2, ge=1, le=4)
-    with_variants: bool = True
-    variant_count: int = Field(default=3, ge=1, le=8)
     brief: str = ""
-
-    @model_validator(mode="after")
-    def _variants_need_brand(self) -> ProposePacksRequest:
-        if self.with_variants and not self.brand_id:
-            raise ValueError("brand_id is required when with_variants is true")
-        return self
 
 
 class ProposePacksResponse(BaseModel):
     packs: list[dict[str, Any]]
     saved_pack_ids: list[str]
-    variants: list[dict[str, Any]] = Field(default_factory=list)
-    saved_variant_ids: list[str] = Field(default_factory=list)
 
 
 class GeneratedPost(BaseModel):
@@ -96,23 +71,6 @@ class GeneratedCarousel(BaseModel):
     slides: list[CarouselSlide]
 
 
-class ProposeVariantsResponse(BaseModel):
-    variants: list[dict[str, Any]]
-    saved_ids: list[str]
-
-
-class VariantOut(BaseModel):
-    id: str
-    slug: str
-    label: str
-    css_vars: dict[str, Any]
-    brand_id: str
-
-
-class ListVariantsResponse(BaseModel):
-    variants: list[VariantOut]
-
-
 class HealthResponse(BaseModel):
     status: str = "ok"
 
@@ -125,6 +83,7 @@ class PackSummary(BaseModel):
     id: str
     label: str
     format: SocialFormat
+    formats: list[SocialFormat]
     pages: int
     images: int
     description: str = ""

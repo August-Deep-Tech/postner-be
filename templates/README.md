@@ -1,19 +1,14 @@
 # Template contract
 
 Packs are **multi-page templates** (ordered HTML pages + shared `css_vars`).
-Single-page files in this folder are one-page templates. **Variants** are
-**per-brand** color skins stored in Postgres (`brand_variants`). Starter JSON
-under repo `variants/*.json` is copied onto a brand when it is created.
-
-Propose them hand in hand:
+Single-page files in this folder are one-page templates. Image generation
+style (`realistic` / `illustration` / `graphics`) lives on the post, not
+on the template — Recraft’s `style` param and the visual-prompt hint follow
+`posts.image_style`.
 
 | Route | Purpose |
 |---|---|
-| `GET /variants?brand_id=` | List that brand’s palettes |
-| `POST /variants/propose` | Requires `brand_id`; color palettes for `template_id` **or** `pack_id` |
-| `POST /packs/propose` | New packs from page HTML; `with_variants` needs `brand_id` and saves skins on the brand |
-
-Variant LLM inputs: design HTML + required `--*` CSS keys + brand name/tagline/description.
+| `POST /packs/propose` | New packs from existing page HTML in this catalog |
 
 ---
 
@@ -33,7 +28,7 @@ Drop HTML files in this folder (e.g. `basic.html`). The API loads them by
 | `{{tagline}}` | Brand tagline |
 | `{{logo_url}}` | Brand logo http(s) URL (empty if none) |
 
-### CSS variables (swappable via variants)
+### CSS variables
 
 Define palette/accents on `:root` only. Example:
 
@@ -46,7 +41,7 @@ Define palette/accents on `:root` only. Example:
 }
 ```
 
-Layout and `font-family` are never touched by variants.
+Layout and `font-family` stay as authored in the HTML.
 
 ### Locked font
 
@@ -83,7 +78,7 @@ packs/<pack_id>/
 ### `pack.json`
 
 - `format` — default canvas size for every page
-- `css_vars` — shared palette (merged under optional variant at render)
+- `css_vars` — shared palette applied at render
 - `pages[]` — each page: `id`, `file`, `role` (`cover` \| `body` \| `close`), `tags[]`, `images` (0 = text-only), `fields[]`
 - `sequence` — ordered page ids for one carousel post
 
@@ -110,7 +105,7 @@ Vary by page; use `white-space: pre-line` so newlines in copy become line breaks
 | `gentle_reminders` | `ig_portrait` (1080×1350) | 6 (cover → intro → split L → solid → split R → close) | 0 (text-only) |
 | `lifestyle_tips` | `ig_portrait` (1080×1350) | 4 (cover peek → tip L → tip R → close handle) | 1 per page |
 
-### Propose packs + variants
+### Propose packs
 
 ```http
 POST /packs/propose
@@ -118,37 +113,20 @@ POST /packs/propose
   "brand_id": "gradde",
   "format": "ig_portrait",
   "count": 2,
-  "with_variants": true,
-  "variant_count": 3,
   "brief": "calm wellness carousel"
 }
 ```
 
 Builds new packs by **cloning existing page templates** from the catalog (does not invent HTML).
-When `with_variants` is true, `brand_id` is required and variants are saved on that brand.
-
-```http
-POST /variants/propose
-{ "brand_id": "<brand-uuid-or-slug>", "pack_id": "lifestyle_tips", "count": 3 }
-```
-
-or
-
-```http
-POST /variants/propose
-{ "brand_id": "<brand-uuid-or-slug>", "template_id": "basic", "count": 3 }
-```
-
-Provide exactly one of `pack_id` / `template_id`. Brand voice biases the palette; rows are stored per brand.
 
 ### Generate / posts with a pack
 
 ```http
 POST /posts
-{ "url": "https://example.com/blog/post", "pack_id": "gentle_reminders", "brand_id": "<brand-id>", "variant_id": "<variant-uuid>" }
+{ "url": "https://example.com/blog/post", "pack_id": "gentle_reminders", "brand_id": "<brand-id>", "image_style": "realistic" }
 ```
 
 - Skips Recraft when all pages have `images: 0`
 - `GET /packs` lists available packs (including proposed ones)
-- `GET /variants?brand_id=` lists that brand’s palettes; pass `variant_id` (UUID or slug)
-- Redesign with `"propose": true` auto-proposes one variant onto the post’s brand
+- `image_style` is `realistic` | `illustration` | `graphics` (omit/`null` picks one at random and stores it)
+- Redesign with `{ "image_style": "illustration", "regenerate_images": true }` to switch Recraft style

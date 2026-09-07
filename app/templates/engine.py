@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import html as html_lib
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
-from app.config import Settings
+from app.config import Settings, SocialFormat, get_size
 
 
 PLACEHOLDER_CAPTION = "{{caption}}"
@@ -12,13 +14,35 @@ PLACEHOLDER_IMAGE = "{{image_url}}"
 PLACEHOLDER_CTA = "{{cta_link}}"
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+_URL_KEYS = {"image_url", "logo_url", "cta_link"}
+_SAFE_URL_SCHEMES = {"https", "http"}  # http kept for local dev backends; no file:, no data:
+
+
+def _safe_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if urlsplit(raw).scheme.lower() not in _SAFE_URL_SCHEMES:
+        return ""
+    return html_lib.escape(raw, quote=True)
 
 
 def fill_placeholders(html: str, values: dict[str, str]) -> str:
-    """Replace {{key}} tokens; unknown keys become empty string."""
+    """Replace {{key}} tokens; unknown keys become empty string.
+
+    Text values are HTML-escaped. URL-like keys are also scheme-allowlisted
+    (http/https only) so they cannot break out of src/href attributes.
+    """
 
     def _repl(match: re.Match[str]) -> str:
-        return values.get(match.group(1), "")
+        key = match.group(1)
+        raw = values.get(key)
+        if raw is None:
+            return ""
+        text = str(raw)
+        if key in _URL_KEYS or key.startswith("image_") or key.endswith("_url"):
+            return _safe_url(text)
+        return html_lib.escape(text, quote=True)
 
     return _PLACEHOLDER_RE.sub(_repl, html)
 
@@ -83,7 +107,7 @@ _ROOT_BLOCK_RE = re.compile(
 _VAR_RE = re.compile(r"(--[\w-]+)\s*:\s*([^;]+);")
 
 
-def apply_color_variant(html: str, css_vars: dict[str, str]) -> str:
+def apply_css_vars(html: str, css_vars: dict[str, str]) -> str:
     """Rewrite only :root custom properties; leave layout and font-family alone."""
     if not css_vars:
         return html
@@ -137,7 +161,7 @@ def ensure_locked_font(html: str, settings: Settings) -> str:
 
     # Ensure a CSS variable for the locked font without overriding author font-family rules
     if "--font-family" not in html:
-        html = apply_color_variant(html, {"--font-family": f'"{font_family}", sans-serif'})
+        html = apply_css_vars(html, {"--font-family": f'"{font_family}", sans-serif'})
 
     return html
 
@@ -148,16 +172,22 @@ def render_filled_html(
     caption: str,
     image_url: str,
     cta_link: str,
+    format_name: SocialFormat,
     settings: Settings,
-    css_vars: dict[str, str] | None = None,
     brand: str = "",
     tagline: str = "",
     logo_url: str = "",
 ) -> str:
     html = load_template_html(template_id, settings)
     html = ensure_locked_font(html, settings)
-    if css_vars:
-        html = apply_color_variant(html, css_vars)
+    width, height = get_size(format_name)
+    html = apply_css_vars(
+        html,
+        {
+            "--canvas-w": f"{width}px",
+            "--canvas-h": f"{height}px",
+        },
+    )
     return fill_template(
         html,
         caption=caption,

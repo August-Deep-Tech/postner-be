@@ -7,6 +7,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
+      --canvas-w: 1080px;
+      --canvas-h: 1350px;
       --bg: #F3F0E8;
       --text: #0B0B0B;
       --accent: #3B6FD8;
@@ -16,11 +18,14 @@
       --font-sans: "Inter", system-ui, sans-serif;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 1080px; height: 1350px; overflow: hidden; background: var(--bg); }
+    html, body { width: var(--canvas-w); height: var(--canvas-h); overflow: hidden; background: var(--bg); }
     #canvas {
-      width: 1080px; height: 1350px; background: var(--bg); color: var(--text);
+      width: var(--canvas-w); height: var(--canvas-h); background: var(--bg); color: var(--text);
       display: flex; flex-direction: column; align-items: center;
-      padding: 110px 100px 90px; text-align: center; position: relative;
+      padding: clamp(56px, 8.2cqh, 110px) clamp(34px, 9.2cqw, 100px) clamp(42px, 6.8cqh, 90px);
+      text-align: center; position: relative;
+      container-type: size;
+      container-name: canvas;
     }
     .brand {
       font-family: var(--font-sans); font-weight: 700; font-size: 28px;
@@ -32,18 +37,30 @@
       width: 100%; max-width: 860px; padding-bottom: 40px;
     }
     .title {
-      font-family: var(--font-serif); font-weight: 600; font-size: 64px;
+      font-family: var(--font-serif); font-weight: 600; font-size: clamp(40px, 5.2cqh, 64px);
       line-height: 1.12; letter-spacing: -0.015em; white-space: pre-line;
       max-width: 820px;
     }
     .body {
-      font-family: var(--font-sans); font-weight: 400; font-size: 32px;
+      font-family: var(--font-sans); font-weight: 400; font-size: clamp(20px, 2.7cqh, 32px);
       line-height: 1.45; white-space: pre-line; max-width: 780px;
     }
     .body .em { font-weight: 700; }
     .page {
       font-family: var(--font-sans); font-weight: 600; font-size: 28px;
       color: var(--accent); letter-spacing: 0.04em;
+    }
+
+    @container canvas (min-aspect-ratio: 4/3) {
+      .main { gap: clamp(16px, 2.6cqh, 34px); }
+      .title { max-width: 66cqw; }
+      .body { max-width: 72cqw; }
+    }
+
+    @container canvas (max-aspect-ratio: 9/16) {
+      .main { max-width: 84cqw; gap: clamp(18px, 3.1cqh, 42px); }
+      .title { font-size: clamp(48px, 6.2cqh, 92px); }
+      .body { font-size: clamp(24px, 2.7cqh, 40px); }
     }
   </style>
 </head>

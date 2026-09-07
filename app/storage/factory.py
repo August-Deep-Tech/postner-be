@@ -12,7 +12,7 @@ def build_storage(settings: Settings) -> ObjectStorage:
     if backend != "s3":
         raise ValueError(
             f"Unknown STORAGE_BACKEND '{backend}' (only 's3' is supported; "
-            "use MinIO locally or R2/S3 in production)"
+            "use Cloudflare R2 or AWS S3)"
         )
     return S3CompatibleStorage(
         bucket=settings.storage_bucket,

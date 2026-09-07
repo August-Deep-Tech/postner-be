@@ -6,10 +6,13 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from typing import get_args
 
-from app.config import Settings, SocialFormat
+from app.config import Settings, SocialFormat, get_size
+_VALID_FORMATS = set(get_args(SocialFormat))
+
 from app.templates.engine import (
-    apply_color_variant,
+    apply_css_vars,
     ensure_locked_font,
     fill_placeholders,
 )
@@ -30,6 +33,7 @@ class TemplatePack:
     id: str
     label: str
     format: SocialFormat
+    formats: list[SocialFormat]
     description: str
     css_vars: dict[str, str]
     pages: list[PackPage]
@@ -86,10 +90,26 @@ def load_pack(pack_id: str, settings: Settings) -> TemplatePack:
         for p in data.get("pages") or []
     ]
     fmt = data.get("format") or "ig_portrait"
+    raw_formats = list(data.get("formats") or [fmt])
+    formats: list[SocialFormat] = []
+    for item in raw_formats:
+        value = str(item).strip()
+        if not value:
+            continue
+        if value not in _VALID_FORMATS:
+            raise ValueError(
+                f"Pack '{pack_id}' has invalid format '{value}'. "
+                f"Expected one of: {', '.join(sorted(_VALID_FORMATS))}"
+            )
+        if value not in formats:
+            formats.append(value)  # type: ignore[arg-type]
+    if not formats:
+        formats = [fmt]  # type: ignore[list-item]
     return TemplatePack(
         id=str(data.get("id") or pack_id),
         label=str(data.get("label") or pack_id),
         format=fmt,  # type: ignore[arg-type]
+        formats=formats,
         description=str(data.get("description") or ""),
         css_vars=dict(data.get("css_vars") or {}),
         pages=pages,
@@ -133,18 +153,23 @@ def render_pack_page_html(
     pack: TemplatePack,
     page: PackPage,
     fields: dict[str, str],
+    format_name: SocialFormat,
     settings: Settings,
     image_urls: list[str] | None = None,
-    variant_css: dict[str, str] | None = None,
 ) -> str:
     html = load_pack_page_html(pack, page)
     html = ensure_locked_font(html, settings)
 
-    css = dict(pack.css_vars)
-    if variant_css:
-        css.update(variant_css)
-    if css:
-        html = apply_color_variant(html, css)
+    if pack.css_vars:
+        html = apply_css_vars(html, pack.css_vars)
+    width, height = get_size(format_name)
+    html = apply_css_vars(
+        html,
+        {
+            "--canvas-w": f"{width}px",
+            "--canvas-h": f"{height}px",
+        },
+    )
 
     values = {k: "" for k in page.fields}
     values.update({k: str(v) for k, v in fields.items() if v is not None})
@@ -240,6 +265,7 @@ def materialize_proposed_pack(
     label = str(proposed.get("label") or pack_id)
     description = str(proposed.get("description") or "")
     fmt = format_name or proposed.get("format") or "ig_portrait"
+    formats = [fmt]
     css_vars = dict(proposed.get("css_vars") or {})
     if not css_vars:
         css_vars = {
@@ -302,6 +328,7 @@ def materialize_proposed_pack(
         "id": pack_id,
         "label": label,
         "format": fmt,
+        "formats": formats,
         "description": description,
         "default_brand": "",
         "css_vars": css_vars,
@@ -317,6 +344,7 @@ def materialize_proposed_pack(
         "label": label,
         "description": description,
         "format": fmt,
+        "formats": formats,
         "pages": len(sequence),
         "images": sum(int(p["images"]) for p in pages_out),
         "css_vars": css_vars,

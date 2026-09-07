@@ -25,6 +25,15 @@ SOCIAL_SIZES: dict[SocialFormat, tuple[int, int]] = {
     "x_post": (1600, 900),
 }
 
+ImageStyle = Literal["realistic", "illustration", "graphics"]
+
+# Recraft V3's `style` parameter (fal.ai) for each image style choice.
+RECRAFT_STYLE_BY_IMAGE_STYLE: dict[ImageStyle, str] = {
+    "realistic": "realistic_image",
+    "illustration": "digital_illustration",
+    "graphics": "vector_illustration",
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -63,7 +72,7 @@ class Settings(BaseSettings):
     # Comma-separated FE origins; empty → allow all (dev)
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
-    # Object storage only (MinIO locally, Cloudflare R2 / AWS S3 in prod).
+    # Object storage only (S3-compatible; Cloudflare R2 in dev/prod).
     storage_backend: str = Field(default="s3", alias="STORAGE_BACKEND")
     storage_bucket: str = Field(default="", alias="STORAGE_BUCKET")
     storage_access_key_id: str = Field(default="", alias="STORAGE_ACCESS_KEY_ID")
@@ -71,11 +80,10 @@ class Settings(BaseSettings):
     storage_endpoint_url: str = Field(default="", alias="STORAGE_ENDPOINT_URL")
     storage_region: str = Field(default="auto", alias="STORAGE_REGION")
     storage_public_base_url: str = Field(default="", alias="STORAGE_PUBLIC_BASE_URL")
-    # "path" for MinIO; "auto" for AWS/R2
+    # "auto" for AWS/R2; "path" for path-style S3-compatible backends
     storage_addressing_style: str = Field(default="auto", alias="STORAGE_ADDRESSING_STYLE")
 
     templates_dir: Path = REPO_ROOT / "templates"
-    variants_dir: Path = REPO_ROOT / "variants"
     brands_dir: Path = REPO_ROOT / "brands"
 
     @model_validator(mode="after")
